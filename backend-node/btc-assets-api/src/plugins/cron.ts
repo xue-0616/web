@@ -3,6 +3,7 @@ import TransactionProcessor from '../services/transaction';
 import cron from 'fastify-cron';
 import { Env } from '../env';
 import Unlocker from '../services/unlocker';
+import { withRedisLock, type RedisLockClient } from '../utils/redis-lock';
 
 export default fp(async (fastify) => {
   try {
@@ -59,6 +60,9 @@ export default fp(async (fastify) => {
       transactionProcessor.closeProcess();
     });
 
+    // BUG-B4: shared redis client for distributed cron locks.
+    const redis = fastify.container.resolve('redis') as RedisLockClient;
+
     const retryMissingTransactionsJob = {
       name: `retry-missing-transacitons-${env.NETWORK}`,
       cronTime: '*/5 * * * *',
@@ -67,8 +71,22 @@ export default fp(async (fastify) => {
           const { name, cronTime } = retryMissingTransactionsJob;
           const checkIn = getSentryCheckIn(name, cronTime);
           try {
-            await transactionProcessor.retryMissingTransactions();
-            checkIn.ok();
+            // BUG-B4: in multi-replica deployments we must only let
+            // one instance run this at a time; TTL 290s keeps us
+            // under the 5-minute cron period with a bit of margin.
+            const r = await withRedisLock(
+              redis,
+              {
+                key: `rgbpp:cron:retry-missing-tx:${env.NETWORK}`,
+                ttlSec: 290,
+                onSkip: () =>
+                  fastify.log.info(
+                    `[cron ${name}] lock held elsewhere, skipping this tick`,
+                  ),
+              },
+              () => transactionProcessor.retryMissingTransactions(),
+            );
+            if (r.acquired) checkIn.ok();
           } catch (err) {
             checkIn.error();
             fastify.log.error(err);
@@ -89,8 +107,19 @@ export default fp(async (fastify) => {
           const { name, cronTime } = unlockBTCTimeLockCellsJob;
           const checkIn = getSentryCheckIn(name, cronTime);
           try {
-            await unlocker.unlockCells();
-            checkIn.ok();
+            const r = await withRedisLock(
+              redis,
+              {
+                key: `rgbpp:cron:unlock-cells:${env.NETWORK}`,
+                ttlSec: 290,
+                onSkip: () =>
+                  fastify.log.info(
+                    `[cron ${name}] lock held elsewhere, skipping this tick`,
+                  ),
+              },
+              () => unlocker.unlockCells(),
+            );
+            if (r.acquired) checkIn.ok();
           } catch (err) {
             checkIn.error();
             fastify.log.error(err);

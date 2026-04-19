@@ -6,6 +6,7 @@ import { AppType, MessageType } from './dto/app-query.input.dto';
 import { AppConfigService } from '../../common/utils-service/app.config.services';
 import { AppQueryOutputDto } from './dto/app-query.output.dto';
 import { ApiMethod, ForwardingApiInputDto } from './dto/forwarding-api.input.dto';
+import { validateForwardingPath } from './dto/forwarding-path.validator';
 import { MyHttpService } from '../../common/utils-service/http.service';
 import { StatusName } from '../../common/utils/error.code';
 import { TIME } from '../../common/utils/time';
@@ -42,6 +43,14 @@ export class WalletService {
             await this.redis.set(cacheKey, JSON.stringify(data), 'EX', TIME.TEN_MINUTES);
         }
     async forwardingSolanaApi(input: ForwardingApiInputDto): Promise<string | null> {
+            // BUG-S3 defence in depth: even with the DTO-level @Matches
+            // guards, re-validate here so any future caller that
+            // bypasses the ValidationPipe (e.g. internal service-to-
+            // service calls) can't slip a crafted path through.
+            const v = validateForwardingPath(input.path);
+            if (!v.ok) {
+                throw new BadRequestException(`${StatusName.ParameterException}: ${v.reason}`);
+            }
             let data = null;
             let url = `${this.appConfig.walletConfig.solanaApi}${input.path}`;
             let body = null;
