@@ -85,8 +85,9 @@ PAYMASTER_CELL_CAPACITY=31600000000
 PAYMASTER_CELL_PRESET_COUNT=500
 # Paymaster cell refill threshold, refill paymaster cell when the balance is less than this threshold.
 PAYMASTER_CELL_REFILL_THRESHOLD=0.3
-# Check the paymaster BTC UTXO when processing rgb++ ckb transaction
-PAYMASTER_RECEIVE_UTXO_CHECK=false
+# Check the paymaster BTC UTXO when processing rgb++ ckb transaction.
+# Default `true` (BUG-B2 fix). Set `false` only on test paymasters.
+PAYMASTER_RECEIVE_UTXO_CHECK=true
 # Paymaster bitcoin address, used to receive BTC from users
 PAYMASTER_RECEIVE_BTC_ADDRESS=<paymaster_btc_address>
 # Paymaster receives BTC UTXO size in sats

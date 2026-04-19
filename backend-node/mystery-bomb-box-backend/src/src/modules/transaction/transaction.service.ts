@@ -18,6 +18,7 @@ import { createMysteryBoxTransaction, grabMysteryBoxInstruction } from '../../co
 import { createPostResponse } from '@solana/actions';
 import { MysteryBoxStatus } from '../../database/entities/mystery-boxs.entity';
 import { StatusName } from '../../common/utils/error.code';
+import { validateBoxParams } from './validators';
 
 @Injectable()
 export class TransactionService implements OnModuleInit {
@@ -166,7 +167,15 @@ export class TransactionService implements OnModuleInit {
             const { bombNumber, amount } = param;
             const { account } = input;
             const publicKey = new PublicKey(account);
-            const bigIntAmount = BigInt(amount * LAMPORTS_PER_SOL);
+            // BUG-M1 / BUG-M5 hardening: reject malformed box parameters
+            // before anything touches the DB. See validators.ts for full
+            // rationale and test coverage.
+            const totalBoxCount = Number(this.appConfig.actionInfo.totalBoxCount);
+            const v = validateBoxParams(amount, bombNumber, totalBoxCount);
+            if (!v.ok) {
+                throw new BadRequestException(`${StatusName.ParameterException}: ${v.reason}`);
+            }
+            const bigIntAmount = v.lamports!;
             const mysteryBox = await this.mysteryBoxDbService.insert(publicKey, bigIntAmount, bombNumber, BigInt(this.appConfig.actionInfo.totalBoxCount));
             if (!mysteryBox) {
                 throw new BadRequestException(StatusName.ParameterException);

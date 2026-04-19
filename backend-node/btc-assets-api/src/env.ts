@@ -107,11 +107,19 @@ const envSchema = z
     PAYMASTER_CELL_REFILL_THRESHOLD: z.coerce.number().default(0.3),
 
     /**
-     * Paymaster receive UTXO check flag, used to check the paymaster BTC UTXO when processing rgb++ ckb transaction.
+     * Paymaster receive UTXO check flag, used to check the paymaster BTC
+     * UTXO when processing rgb++ ckb transaction.
+     *
+     * BUG-B2 fix: default is `true`. With `false`, any caller can drain
+     * paymaster cells by submitting rgb++ ckb transactions without ever
+     * paying the corresponding BTC. Operators who genuinely want to run
+     * without a paymaster address must now explicitly set this to
+     * `false`; the previous silent default made the vulnerability easy
+     * to miss in production.
      */
     PAYMASTER_RECEIVE_UTXO_CHECK: z
       .enum(['true', 'false'])
-      .default('false')
+      .default('true')
       .transform((value) => value === 'true'),
     /**
      * Paymaster bitcoin address, used to receive BTC from users.

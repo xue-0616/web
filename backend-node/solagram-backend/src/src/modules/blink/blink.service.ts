@@ -10,6 +10,7 @@ import { BlinkListOutput } from './dto/blink.list.output.dto';
 import { BlinkShortCodeDBService } from './blink-short-code-db.service';
 import { BlinkShortCodeOutputDto } from './dto/blink.short.code.output.dto';
 import { TIME } from '../../common/utils/time';
+import { isTrustedBlinkUrl } from './blink-url.validator';
 
 @Injectable()
 export class BlinkService {
@@ -72,15 +73,38 @@ export class BlinkService {
             return `${this.appConfig.nodeEnv}:Solagram:Blink:${shortCode}:{tag}`;
         }
     async getUrlByShortCode(shortCode: string): Promise<BlinkShortCodeOutputDto> {
+            // BUG-S1 (HIGH) fix: re-check the URL against the current
+            // trusted-host registry on every read. A URL that was
+            // acceptable when stored may have been revoked upstream, or
+            // an attacker may have planted a row via a vulnerable write
+            // path. Either way, only URLs whose host is still trusted
+            // are returned; anything else is logged and dropped.
+            const trusted = (await this.getAllTrustedHost()).list;
             const cacheKey = this.shortCodeCacheKey(shortCode);
             const cachedData = await this.redis.get(cacheKey);
             if (cachedData) {
-                return { url: cachedData };
+                const check = isTrustedBlinkUrl(cachedData, trusted);
+                if (check.ok) {
+                    return { url: cachedData };
+                }
+                // Purge the poisoned entry so the next lookup hits DB and
+                // can be re-validated (or also rejected).
+                this.logger.warn(
+                    `Dropping cached blink ${shortCode}: ${check.reason}`,
+                );
+                await this.redis.del(cacheKey);
             }
             const databaseRecord = await this.blinkShortCodeDBService.findOne({
                 shortCode,
             });
             if (databaseRecord) {
+                const check = isTrustedBlinkUrl(databaseRecord.blink, trusted);
+                if (!check.ok) {
+                    this.logger.warn(
+                        `Refusing to serve blink ${shortCode}: ${check.reason}`,
+                    );
+                    return { url: null };
+                }
                 await this.redis.set(cacheKey, databaseRecord.blink, 'EX', TIME.HALF_HOUR);
                 return { url: databaseRecord.blink };
             }
