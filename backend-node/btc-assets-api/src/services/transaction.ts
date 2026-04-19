@@ -35,6 +35,12 @@ import { JwtPayload } from '../plugins/jwt';
 import { serializeCellDep } from '@nervosnetwork/ckb-sdk-utils';
 import { BitcoinClientAPIError } from './bitcoin';
 import { HttpStatusCode } from 'axios';
+import {
+  decideEnqueueAction,
+  type DedupValue,
+  type JobDedupState,
+} from './transaction-dedup';
+import { decidePaymasterCellRollback } from './paymaster-rollback';
 
 export interface ITransactionRequest {
   txid: string;
@@ -440,6 +446,13 @@ export default class TransactionProcessor implements ITransactionProcessor {
       const ckbRawTx = this.getCkbRawTxWithRealBtcTxid(ckbVirtualResult, txid);
       let signedTx = await this.appendTxWitnesses(txid, ckbRawTx);
 
+      // BUG-B3 tracking flag: becomes true the moment
+      // `sendTransaction` returns a CKB tx hash. After that point the
+      // paymaster cell is spent on-chain (pending confirmation) and
+      // MUST NOT be rolled back to `unspent`, even if a later call
+      // such as `waitForTranscationConfirmed` throws.
+      let ckbSubmitted = false;
+
       try {
         // append paymaster cell and sign the transaction if needed
         if (ckbVirtualResult.needPaymasterCell) {
@@ -448,15 +461,24 @@ export default class TransactionProcessor implements ITransactionProcessor {
         this.cradle.logger.debug(`[TransactionProcessor] Transaction signed: ${JSON.stringify(signedTx)}`);
 
         const txHash = await this.cradle.ckb.sendTransaction(signedTx);
+        ckbSubmitted = true;
         job.returnvalue = txHash;
         this.cradle.logger.info(`[TransactionProcessor] Transaction sent: ${txHash}`);
 
         await this.cradle.ckb.waitForTranscationConfirmed(txHash);
         this.cradle.logger.info(`[TransactionProcessor] Transaction confirmed: ${txHash}`);
 
-        // BA-H1 FIX: Mark dedup key as completed to prevent future re-submissions
+        // BUG-B1 fix: mark dedup key as completed with the resulting
+        // CKB tx hash. Prefix `completed:` is matched by
+        // decideEnqueueAction so any future submission of the same BTC
+        // txid is blocked with a forensically useful log line.
         const dedupKey = `rgbpp:tx:dedup:${txid}`;
-        await this.cradle.redis.set(dedupKey, 'completed', 'EX', 604800); // 7 days
+        await this.cradle.redis.set(
+          dedupKey,
+          `completed:${txHash}`,
+          'EX',
+          604800, // 7 days — well past typical BTC reorg depth
+        );
 
         // mark the paymaster cell as spent to avoid double spending
         if (ckbVirtualResult.needPaymasterCell) {
@@ -474,8 +496,26 @@ export default class TransactionProcessor implements ITransactionProcessor {
           await this.fixPoolRejectedTransactionByMinFeeRate(job);
           return;
         }
-        // mark the paymaster cell as unspent if the transaction failed
-        this.cradle.paymaster.markPaymasterCellAsUnspent(txid, signedTx!);
+
+        // BUG-B3 (HIGH) fix: decide rollback based on whether the CKB
+        // tx was actually broadcast. See paymaster-rollback.ts for the
+        // full decision matrix.
+        const rollback = decidePaymasterCellRollback({
+          ckbSubmitted,
+          needPaymasterCell: !!ckbVirtualResult.needPaymasterCell,
+        });
+        switch (rollback) {
+          case 'keep-spent':
+            this.cradle.logger.warn(
+              `[TransactionProcessor] CKB tx already submitted for ${txid}; keeping paymaster cell marked spent and re-throwing for retry`,
+            );
+            break;
+          case 'rollback':
+            this.cradle.paymaster.markPaymasterCellAsUnspent(txid, signedTx!);
+            break;
+          case 'no-op':
+            break;
+        }
         throw err;
       }
     } catch (err) {
@@ -567,40 +607,59 @@ export default class TransactionProcessor implements ITransactionProcessor {
    * @param request - the transaction request
    */
   public async enqueueTransaction(request: ITransactionRequest): Promise<Job<ITransactionRequest>> {
-    // BA-H1 FIX: Check if a job with this txid already exists (including completed/failed)
+    // BUG-B1 (HIGH) fix: consolidated dedup pipeline. See
+    // `services/transaction-dedup.ts` for the full decision matrix
+    // (and test/transaction-dedup.pure.test.ts for the exhaustive
+    // coverage of what used to be a silent fall-through on
+    // "processing").
     const existingJob = await this.queue.getJob(request.txid);
-    if (existingJob) {
-      const state = await existingJob.getState();
-      // If the job is completed, reject re-submission to prevent double-spend
-      if (state === 'completed') {
-        this.cradle.logger.info(`[TransactionProcessor] Transaction already completed, rejecting re-submission: ${request.txid}`);
-        return existingJob;
-      }
-      // If the job is active, waiting, or delayed, return the existing job
-      if (state === 'active' || state === 'waiting' || state === 'delayed') {
-        this.cradle.logger.info(`[TransactionProcessor] Transaction already in queue (${state}), returning existing job: ${request.txid}`);
-        return existingJob;
-      }
-      // If failed, allow re-submission but check Redis dedup key first
-    }
+    const jobState: JobDedupState = existingJob
+      ? ((await existingJob.getState()) as JobDedupState)
+      : undefined;
 
-    // BA-H1 FIX: Redis-based idempotency key to prevent re-submission after job removal
     const dedupKey = `rgbpp:tx:dedup:${request.txid}`;
-    const wasSet = await this.cradle.redis.set(dedupKey, 'processing', 'EX', 86400, 'NX');
-    if (!wasSet) {
-      // Check if it was already completed
-      const dedupState = await this.cradle.redis.get(dedupKey);
-      if (dedupState === 'completed') {
-        this.cradle.logger.info(`[TransactionProcessor] Transaction already completed (dedup check): ${request.txid}`);
-        throw new Error(`Transaction ${request.txid} has already been processed`);
+    // `SET NX` + short TTL: wasSet === 'OK' on first arrival, null on
+    // collision. The TTL bounds how long a poisoned "processing" entry
+    // can block retries if the worker crashes before marking it.
+    const setnxResult = await this.cradle.redis.set(
+      dedupKey,
+      'processing',
+      'EX',
+      86400,
+      'NX',
+    );
+    const setnxWon = setnxResult === 'OK';
+    const dedupValue = setnxWon
+      ? 'processing'
+      : ((await this.cradle.redis.get(dedupKey)) as DedupValue);
+
+    const action = decideEnqueueAction(jobState, dedupValue, setnxWon);
+
+    switch (action.kind) {
+      case 'reuse-existing': {
+        this.cradle.logger.info(
+          `[TransactionProcessor] ${action.reason}: ${request.txid}`,
+        );
+        // existingJob is non-null when Rule 1 fires (bullmq job state
+        // in {completed,active,waiting,delayed}), so the `!` is safe.
+        return existingJob!;
+      }
+      case 'block': {
+        this.cradle.logger.warn(
+          `[TransactionProcessor] refusing enqueue ${request.txid}: ${action.reason}`,
+        );
+        throw new Error(
+          `Transaction ${request.txid} cannot be enqueued: ${action.reason}`,
+        );
+      }
+      case 'proceed': {
+        const job = await this.queue.add(request.txid, request, {
+          jobId: request.txid,
+          delay: this.cradle.env.TRANSACTION_QUEUE_JOB_DELAY,
+        });
+        return job;
       }
     }
-
-    const job = await this.queue.add(request.txid, request, {
-      jobId: request.txid,
-      delay: this.cradle.env.TRANSACTION_QUEUE_JOB_DELAY,
-    });
-    return job;
   }
 
   /**

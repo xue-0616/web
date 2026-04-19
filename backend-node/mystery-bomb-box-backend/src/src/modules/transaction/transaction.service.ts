@@ -146,6 +146,22 @@ export class TransactionService implements OnModuleInit {
                                 await this.dbService.failGrabMysteryBox(tx.txOrderId, 'timeout', null);
                                 break;
                             }
+                            case TransactionType.DistributeMysteryBox: {
+                                // BUG-M3 (HIGH) fix: previously this
+                                // case was missing, so timed-out
+                                // distribute txs left the box in
+                                // DISTRIBUTE_PENDING forever and all
+                                // user funds (grab amounts + box
+                                // amount) stayed locked in the
+                                // submitter account. Marking the box
+                                // DISTRIBUTE_FAILED surfaces the
+                                // incident for operator-led refund.
+                                this.logger.warn(
+                                    `[watchTransactions] Distribute tx timed out for box ${tx.txOrderId} (blockHeight=${blockHeight}, txBlockHeight=${tx.txBlockHeight}); marking DISTRIBUTE_FAILED`,
+                                );
+                                await this.dbService.failDistributeMysteryBox(tx.txOrderId, 'timeout', null);
+                                break;
+                            }
                         }
                         const release = await this.mutex.acquire();
                         try {

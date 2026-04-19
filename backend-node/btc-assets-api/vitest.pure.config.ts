@@ -7,7 +7,10 @@ import { defineConfig } from 'vitest/config';
  */
 export default defineConfig({
   test: {
-    include: ['test/**/*.pure.test.ts', 'test/env.defaults.test.ts'],
+    include: [
+      'test/**/*.pure.test.ts',
+      'test/env.defaults.test.ts',
+    ],
     pool: 'forks',
   },
 });

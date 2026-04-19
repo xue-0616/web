@@ -319,6 +319,96 @@ export class DbService {
             }
             return { box };
         }
+    /**
+     * BUG-M3 (HIGH) fix: mark a distribute transaction as failed and
+     * move the box to DISTRIBUTE_FAILED. This path is entered by the
+     * watcher when a Solana tx's blockhash expires (txBlockHeight + 200
+     * < current blockHeight). Without it the box stays in
+     * DISTRIBUTE_PENDING forever and user funds are locked.
+     *
+     * We transition grab rows in DISTRIBUTE_* intermediate states to
+     * their *_FAILED counterparts so the state is self-consistent; a
+     * follow-up refund flow (manual or cron) can then settle funds.
+     */
+    async failDistributeMysteryBox(boxId: bigint, errorReason: string, txSig: Buffer | null): Promise<{
+        box: MysteryBoxEntity;
+    }> {
+            let box = await this.mysteryBoxEntity.findOne({
+                where: { id: boxId },
+            });
+            if (!box) {
+                throw new Error(`MysteryBoxEntity with id ${boxId} not found`);
+            }
+            switch (box.status) {
+                case MysteryBoxStatus.DISTRIBUTE_INIT:
+                case MysteryBoxStatus.DISTRIBUTE_PENDING: {
+                    const queryRunner = this.dataSource.createQueryRunner();
+                    await queryRunner.connect();
+                    try {
+                        await queryRunner.startTransaction();
+                        const manager = queryRunner.manager;
+                        await manager.update(TransactionEntity, { id: box.lotteryDrawTransactionId }, {
+                            status: TransactionStatus.Failed,
+                            errorReason,
+                            txSig,
+                            updatedAt: new Date(),
+                        });
+                        // Move any grabs in an intermediate distribute
+                        // state to their respective failed states so the
+                        // row is self-consistent for downstream refund
+                        // tooling.
+                        await manager.update(
+                            GrabMysteryBoxEntity,
+                            {
+                                lotteryDrawTransactionId: box.lotteryDrawTransactionId,
+                                status: In([
+                                    GrabTransactionStatus.DISTRIBUTE_INIT,
+                                    GrabTransactionStatus.DISTRIBUTE_PENDING,
+                                ]),
+                            },
+                            {
+                                status: GrabTransactionStatus.DISTRIBUTE_FAILED,
+                                updatedAt: new Date(),
+                            },
+                        );
+                        await manager.update(
+                            GrabMysteryBoxEntity,
+                            {
+                                lotteryDrawTransactionId: box.lotteryDrawTransactionId,
+                                status: In([
+                                    GrabTransactionStatus.REFUND_INIT,
+                                    GrabTransactionStatus.REFUND_PENDING,
+                                ]),
+                            },
+                            {
+                                status: GrabTransactionStatus.REFUND_FAILED,
+                                updatedAt: new Date(),
+                            },
+                        );
+                        box.status = MysteryBoxStatus.DISTRIBUTE_FAILED;
+                        box.updatedAt = new Date();
+                        box = await manager.save(box);
+                        await queryRunner.commitTransaction();
+                    }
+                    catch (error) {
+                        await queryRunner.rollbackTransaction();
+                        throw new Error(`[failDistributeMysteryBox] Failed to update mystery box status: ${(error as Error).message}`);
+                    }
+                    finally {
+                        await queryRunner.release();
+                    }
+                    break;
+                }
+                case MysteryBoxStatus.DISTRIBUTE_FAILED:
+                case MysteryBoxStatus.DISTRIBUTE_CONFIRMED: {
+                    break;
+                }
+                default: {
+                    throw new Error(`MysteryBoxEntity with id ${boxId} status is ${box.status}`);
+                }
+            }
+            return { box };
+        }
     async generateGrabMysteryBox(tx: Transaction, garbMysteryBox: GrabMysteryBoxEntity): Promise<{
         box: GrabMysteryBoxEntity;
         tx: TransactionEntity;
