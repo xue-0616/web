@@ -56,3 +56,4 @@ api = { path = "crates/api" }
 configs = { path = "crates/configs" }
 relayer = { path = "crates/relayer" }
 relayer-redis = { path = "crates/relayer-redis" }
+huehub-observability = { path = "../huehub-observability" }
