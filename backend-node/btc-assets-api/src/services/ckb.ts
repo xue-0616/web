@@ -3,6 +3,11 @@ import { Cradle } from '../container';
 import { Indexer, RPC } from '@ckb-lumos/lumos';
 import { z } from 'zod';
 import * as Sentry from '@sentry/node';
+import {
+  DEFAULT_POLL_INTERVAL_MS,
+  DEFAULT_POLL_TIMEOUT_MS,
+  classifyCkbStatus,
+} from './ckb-poll';
 
 // https://github.com/nervosnetwork/ckb/blob/develop/rpc/src/error.rs#L33
 export enum CKBRPCErrorCodes {
@@ -133,32 +138,59 @@ export default class CKBClient {
   }
 
   /**
-   * Wait for the ckb transaction to be confirmed
+   * Wait for the ckb transaction to be confirmed.
+   *
+   * BUG-B7 (MEDIUM) fix: the previous recursive implementation had
+   * neither a timeout nor a rejection path — a tx the node rejected
+   * (or any transient RPC glitch) would keep the promise pending
+   * forever, blocking the bullmq worker. The loop below honours a
+   * real deadline and fails fast on `rejected`; see
+   * `ckb-poll.ts::classifyCkbStatus` for the pure decision matrix.
+   *
    * @param txHash - the ckb transaction hash
+   * @param opts   - optional poll interval / timeout overrides
    */
-  public waitForTranscationConfirmed(txHash: string) {
-    // eslint-disable-next-line no-async-promise-executor
-    return new Promise(async (resolve) => {
+  public async waitForTranscationConfirmed(
+    txHash: string,
+    opts: { pollIntervalMs?: number; timeoutMs?: number } = {},
+  ): Promise<string> {
+    const pollIntervalMs = opts.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+    const timeoutMs = opts.timeoutMs ?? DEFAULT_POLL_TIMEOUT_MS;
+    const startedAt = Date.now();
+
+    while (true) {
+      let status: string | undefined;
       try {
         const transaction = await this.rpc.getTransaction(txHash);
-        const { status } = transaction.txStatus;
-        if (status === 'committed') {
-          resolve(txHash);
-        } else {
-          setTimeout(() => {
-            resolve(this.waitForTranscationConfirmed(txHash));
-          }, 1000);
-        }
+        status = transaction.txStatus.status;
       } catch (e) {
+        // Transient RPC error: leave `status` undefined so classify
+        // returns `wait` and we retry until the deadline expires.
         Sentry.withScope((scope) => {
           scope.setTag('ckb_txhash', txHash);
           scope.captureException(e);
         });
-        setTimeout(() => {
-          resolve(this.waitForTranscationConfirmed(txHash));
-        }, 1000);
       }
-    });
+
+      const outcome = classifyCkbStatus({
+        status,
+        elapsedMs: Date.now() - startedAt,
+        timeoutMs,
+      });
+      switch (outcome.kind) {
+        case 'done':
+          return txHash;
+        case 'fail-rejected':
+          throw new Error(`CKB transaction ${txHash} was rejected by the node`);
+        case 'fail-timeout':
+          throw new Error(
+            `Timed out after ${timeoutMs}ms waiting for CKB transaction ${txHash} to confirm (last status=${status ?? 'rpc-error'})`,
+          );
+        case 'wait':
+          await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+          continue;
+      }
+    }
   }
 
   /**

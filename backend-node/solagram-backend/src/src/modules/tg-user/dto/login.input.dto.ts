@@ -1,11 +1,19 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmptyObject, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsInt, IsNotEmptyObject, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class UserInfo {
     @ApiProperty({
         type: Number,
+        description: 'Telegram user id — positive integer within JS safe range.',
     })
-    @IsNumber()
+    // BUG-S4 (LOW) fix: @IsNumber() alone accepts floats, NaN, negative
+    // and near-MAX_SAFE_INTEGER overflow values that later get
+    // string-templated into Cognito's Username and redis cache keys.
+    // Telegram user ids are positive 53-bit-safe integers, so enforce
+    // that shape here.
+    @IsInt()
+    @Min(1)
+    @Max(Number.MAX_SAFE_INTEGER)
     id!: number;
     @ApiProperty({
         type: String,

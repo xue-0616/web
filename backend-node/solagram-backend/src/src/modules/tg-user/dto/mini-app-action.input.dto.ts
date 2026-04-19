@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsNumber, IsOptional } from 'class-validator';
+import { IsEnum, IsInt, IsNumber, IsOptional, Max, Min } from 'class-validator';
 import { AppType, OpenActionType, OpenSource } from '../../../database/entities/open-app-action.entity';
 
 export class MiniAppActionInputDto {
@@ -17,9 +17,12 @@ export class MiniAppActionInputDto {
     chat_id!: string;
     @ApiProperty({
         type: Number,
-        description: 'Telegram.WebApp.initDataUnsafe',
+        description: 'Telegram user id — positive integer within JS safe range.',
     })
-    @IsNumber()
+    // BUG-S4 (LOW) fix — see UserInfo.id rationale. Same guard.
+    @IsInt()
+    @Min(1)
+    @Max(Number.MAX_SAFE_INTEGER)
     user_id!: number;
     @ApiProperty({
         enum: OpenSource,

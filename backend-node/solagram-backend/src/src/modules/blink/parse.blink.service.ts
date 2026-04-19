@@ -4,6 +4,7 @@ import { BlinkService } from './blink.service';
 import { IBlinkActionInfo } from '../../common/interface/blink-actions';
 import { extractAllUrls } from '../../common/utils/tools';
 import { detectSolanaAction } from '../../common/utils/solana.blink';
+import { isTrustedBlinkUrl } from './blink-url.validator';
 
 @Injectable()
 export class ParseBlinkService {
@@ -24,11 +25,20 @@ export class ParseBlinkService {
             if (hostList.length === 0) {
                 return [];
             }
+            // BUG-S6 fix: use isTrustedBlinkUrl rather than a raw
+            // `hostList.includes` check. That helper normalises case /
+            // www, enforces https, and — critically — rejects URLs
+            // whose query string smuggles another destination via
+            // ?url=/?redirect= etc., closing the proxy.dial.to style
+            // bypass. See blink-url.validator.ts for the full matrix.
             let blinkUrls = (await Promise.all(urls.map((url: string) => {
-                const hostname = new URL(url).hostname;
-                if (hostList.includes(hostname)) {
+                const check = isTrustedBlinkUrl(url, hostList);
+                if (check.ok) {
                     return detectSolanaAction(url, this.logger);
                 }
+                this.logger.debug(
+                    `[parseBlinkUrls] dropping ${url}: ${check.reason}`,
+                );
                 return undefined;
             }))).filter((x): x is IBlinkActionInfo => Boolean(x));
             return blinkUrls;

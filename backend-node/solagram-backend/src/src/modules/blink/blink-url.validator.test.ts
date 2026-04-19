@@ -100,4 +100,69 @@ describe('isTrustedBlinkUrl (BUG-S1)', () => {
       expect(isTrustedBlinkUrl('https://dial.to', []).ok).toBe(false);
     });
   });
+
+  describe('proxy bypass defence (BUG-S6)', () => {
+    const TRUSTED_PROXY = ['proxy.dial.to', 'dial.to'];
+
+    it('rejects proxy.dial.to when ?url= points to untrusted host', () => {
+      const r = isTrustedBlinkUrl(
+        'https://proxy.dial.to/?url=https%3A%2F%2Fevil.com%2Fsteal',
+        TRUSTED_PROXY,
+      );
+      expect(r.ok).toBe(false);
+      expect(r.reason).toMatch(/proxy query param/);
+    });
+
+    it('accepts proxy.dial.to when ?url= points to another trusted host', () => {
+      const r = isTrustedBlinkUrl(
+        'https://proxy.dial.to/?url=https%3A%2F%2Fdial.to%2Faction',
+        TRUSTED_PROXY,
+      );
+      expect(r.ok).toBe(true);
+    });
+
+    it('rejects ?redirect= smuggling', () => {
+      const r = isTrustedBlinkUrl(
+        'https://proxy.dial.to/?redirect=https%3A%2F%2Fevil.com',
+        TRUSTED_PROXY,
+      );
+      expect(r.ok).toBe(false);
+    });
+
+    it('rejects ?action= smuggling', () => {
+      const r = isTrustedBlinkUrl(
+        'https://proxy.dial.to/?action=https%3A%2F%2Fevil.com',
+        TRUSTED_PROXY,
+      );
+      expect(r.ok).toBe(false);
+    });
+
+    it('rejects ?target= smuggling', () => {
+      const r = isTrustedBlinkUrl(
+        'https://proxy.dial.to/?target=https%3A%2F%2Fevil.com',
+        TRUSTED_PROXY,
+      );
+      expect(r.ok).toBe(false);
+    });
+
+    it('rejects ?href= smuggling', () => {
+      const r = isTrustedBlinkUrl(
+        'https://proxy.dial.to/?href=https%3A%2F%2Fevil.com',
+        TRUSTED_PROXY,
+      );
+      expect(r.ok).toBe(false);
+    });
+
+    it('rejects nested proxy (?url= → proxy → ?url= → evil)', () => {
+      const inner = encodeURIComponent(
+        'https://proxy.dial.to/?url=' +
+          encodeURIComponent('https://evil.com'),
+      );
+      const r = isTrustedBlinkUrl(
+        `https://proxy.dial.to/?url=${inner}`,
+        TRUSTED_PROXY,
+      );
+      expect(r.ok).toBe(false);
+    });
+  });
 });

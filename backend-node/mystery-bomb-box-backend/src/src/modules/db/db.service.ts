@@ -29,10 +29,17 @@ export class DbService {
             transaction.txBlockHeight = BigInt(recentBlockHeight);
             transaction.status = TransactionStatus.Pending;
             transaction.txOrderType = TransactionType.CreateMysteryBox;
-            await queryRunner.connect();
-            await queryRunner.startTransaction();
-            const manager = queryRunner.manager;
+            // BUG-M6 (MEDIUM) fix: connect()/startTransaction() are
+            // moved inside the try so the `finally { release }` still
+            // fires if connection setup itself fails (otherwise a DB
+            // blip leaks a queryRunner). The catch also rethrows so
+            // callers don't silently receive a half-saved object.
+            let transactionOpen = false;
             try {
+                await queryRunner.connect();
+                await queryRunner.startTransaction();
+                transactionOpen = true;
+                const manager = queryRunner.manager;
                 transaction = await manager.save(transaction);
                 mysteryBox.updatedAt = new Date();
                 mysteryBox.status = MysteryBoxStatus.INIT_PENDING;
@@ -42,7 +49,10 @@ export class DbService {
             }
             catch (error) {
                 this.logger.error(`[generateMysteryBox] error ${(error as Error)?.stack}`);
-                await queryRunner.rollbackTransaction();
+                if (transactionOpen) {
+                    await queryRunner.rollbackTransaction();
+                }
+                throw error;
             }
             finally {
                 await queryRunner.release();
@@ -423,10 +433,17 @@ export class DbService {
             transaction.status = TransactionStatus.Pending;
             transaction.txOrderType = TransactionType.GrabMysteryBox;
             const queryRunner = this.dataSource.createQueryRunner();
-            await queryRunner.connect();
-            await queryRunner.startTransaction();
-            const manager = queryRunner.manager;
+            // BUG-M6 (MEDIUM) fix: mirror generateMysteryBox — keep
+            // connect()/startTransaction() inside the try so a
+            // connection failure can't leak the queryRunner, and
+            // rethrow on catch so the caller doesn't see a silently
+            // rolled-back object as "success".
+            let transactionOpen = false;
             try {
+                await queryRunner.connect();
+                await queryRunner.startTransaction();
+                transactionOpen = true;
+                const manager = queryRunner.manager;
                 transaction = await manager.save(transaction);
                 garbMysteryBox.transactionId = transaction.id;
                 transaction.updatedAt = new Date();
@@ -435,7 +452,10 @@ export class DbService {
             }
             catch (error) {
                 this.logger.error(`[generateGrabMysteryBox] error ${(error as Error)?.stack}`);
-                await queryRunner.rollbackTransaction();
+                if (transactionOpen) {
+                    await queryRunner.rollbackTransaction();
+                }
+                throw error;
             }
             finally {
                 await queryRunner.release();
@@ -445,10 +465,15 @@ export class DbService {
     async distributeMysteryBox(lotteryDrawResults: ILotteryDrawResults, tx: Transaction): Promise<void> {
             const boxId = lotteryDrawResults.creator.id;
             const queryRunner = this.dataSource.createQueryRunner();
-            await queryRunner.connect();
-            await queryRunner.startTransaction();
             const { tx: solanaTx, recentBlockHeight } = tx;
+            // BUG-M6 (MEDIUM) fix: keep connect()/startTransaction()
+            // inside the try so a connection failure can't leak the
+            // queryRunner.
+            let transactionOpen = false;
             try {
+                await queryRunner.connect();
+                await queryRunner.startTransaction();
+                transactionOpen = true;
                 const manager = queryRunner.manager;
                 const mysteryBox = await manager.findOne(MysteryBoxEntity, {
                     where: { id: boxId, status: MysteryBoxStatus.GRABBING },
@@ -493,7 +518,9 @@ export class DbService {
                 await queryRunner.commitTransaction();
             }
             catch (error) {
-                await queryRunner.rollbackTransaction();
+                if (transactionOpen) {
+                    await queryRunner.rollbackTransaction();
+                }
                 throw new Error(`[initDistributeMysteryBox] Failed to update mystery box status: ${(error as Error).message}`);
             }
             finally {

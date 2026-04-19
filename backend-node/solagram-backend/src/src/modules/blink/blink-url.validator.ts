@@ -52,6 +52,13 @@ export interface UrlCheckResult {
  *   - URL must not embed credentials (`https://user:pass@host/...`) —
  *     common phishing trick.
  */
+/**
+ * Query-param keys commonly used by blink proxies (e.g. `proxy.dial.to`)
+ * to smuggle an arbitrary target URL through an allow-listed outer
+ * host. BUG-S6 defence.
+ */
+const PROXY_URL_PARAMS = ['url', 'redirect', 'action', 'target', 'href'] as const;
+
 export function isTrustedBlinkUrl(
   url: unknown,
   trustedHosts: readonly string[],
@@ -69,10 +76,25 @@ export function isTrustedBlinkUrl(
   if (parsed.protocol !== 'https:') {
     return { ok: false, reason: `url must use https, got ${parsed.protocol}` };
   }
-  const target = normaliseHost(parsed.hostname);
   const allowed = new Set(trustedHosts.map(normaliseHost));
+  const target = normaliseHost(parsed.hostname);
   if (!allowed.has(target)) {
     return { ok: false, reason: `host ${target} is not in trusted list` };
+  }
+  // BUG-S6 fix: if the URL carries an embedded-URL query param
+  // (proxy-style), recursively verify that inner URL is also trusted.
+  // Otherwise an allow-listed proxy host (e.g. `proxy.dial.to`) would
+  // let an attacker serve arbitrary content via `?url=https://evil`.
+  for (const key of PROXY_URL_PARAMS) {
+    const inner = parsed.searchParams.get(key);
+    if (!inner) continue;
+    const innerCheck = isTrustedBlinkUrl(inner, trustedHosts);
+    if (!innerCheck.ok) {
+      return {
+        ok: false,
+        reason: `proxy query param "${key}" points to untrusted URL: ${innerCheck.reason}`,
+      };
+    }
   }
   return { ok: true, host: target };
 }
