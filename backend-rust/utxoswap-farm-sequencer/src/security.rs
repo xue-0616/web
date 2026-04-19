@@ -239,3 +239,43 @@ where
         })
     }
 }
+
+// ===========================================================================
+// Tests
+// ===========================================================================
+//
+// Same discipline as the relayer hardening pass: gate the pure
+// `constant_time_eq` function with exhaustive tests. The Redis-backed
+// RateLimiter and the ApiKeyAuth Transform are covered by the
+// integration suite in the shared `huehub-security-middleware` crate;
+// duplicating that harness here would add no signal.
+#[cfg(test)]
+mod tests {
+    use super::constant_time_eq;
+
+    #[test]
+    fn equal_slices_compare_equal() {
+        assert!(constant_time_eq(b"abcdef", b"abcdef"));
+    }
+
+    #[test]
+    fn differing_slices_of_same_length_are_caught_at_any_position() {
+        // Last-byte difference.
+        assert!(!constant_time_eq(b"abcdef", b"abcdeg"));
+        // First-byte difference — guards against short-circuit regressions.
+        assert!(!constant_time_eq(b"abcdef", b"zbcdef"));
+    }
+
+    #[test]
+    fn length_mismatch_short_circuits() {
+        assert!(!constant_time_eq(b"abc", b"abcd"));
+        assert!(!constant_time_eq(b"", b"a"));
+    }
+
+    #[test]
+    fn both_empty_slices_compare_equal() {
+        // The ApiKeyAuthMiddleware's fail-closed branch is elsewhere;
+        // here we pin the mathematical identity.
+        assert!(constant_time_eq(b"", b""));
+    }
+}

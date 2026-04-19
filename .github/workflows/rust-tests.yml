@@ -18,12 +18,16 @@ on:
     paths:
       - 'backend-rust/huehub-security-middleware/**'
       - 'backend-rust/unipass-wallet-relayer/src/security.rs'
+      - 'backend-rust/utxoswap-farm-sequencer/src/security.rs'
+      - 'backend-rust/utxoswap-farm-sequencer/crates/types/src/parser.rs'
       - '.github/workflows/rust-tests.yml'
   push:
     branches: [main]
     paths:
       - 'backend-rust/huehub-security-middleware/**'
       - 'backend-rust/unipass-wallet-relayer/src/security.rs'
+      - 'backend-rust/utxoswap-farm-sequencer/src/security.rs'
+      - 'backend-rust/utxoswap-farm-sequencer/crates/types/src/parser.rs'
       - '.github/workflows/rust-tests.yml'
 
 jobs:
@@ -85,3 +89,32 @@ jobs:
         # and avoids pulling decompiled sibling crates into the
         # gating path.
         run: cargo test --bin unipass-wallet-relayer security::tests
+
+  utxoswap-farm-sequencer-purefuncs:
+    # Gates the two pure-function test suites added in the BUG-P1
+    # hardening pass:
+    #   - src/security.rs -> constant_time_eq (4 tests)
+    #   - crates/types/src/parser.rs -> parse_farm_intent + helpers
+    #     (9 tests, including the BUG-P1-M1 unwrap-removal regression
+    #     coverage for attacker-controlled cell data)
+    # We test crates/types separately (cargo test -p types) because
+    # it's a leaf crate with no network / redis dependencies and
+    # compiles fast; running it in isolation keeps the gate quick and
+    # surfaces parser regressions without dragging the whole workspace
+    # into the gating path (some sibling crates still have decompiled
+    # stubs per BUG-P1-H2).
+    name: utxoswap-farm-sequencer (parser + security::tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend-rust/utxoswap-farm-sequencer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend-rust/utxoswap-farm-sequencer
+      - name: test parser (crates/types)
+        run: cargo test -p types parser::tests
+      - name: test security module (bin)
+        run: cargo test --bin utxoswap-farm-sequencer security::tests
