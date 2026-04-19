@@ -1,0 +1,86 @@
+name: backend-tests
+
+# Gates PRs on the 124 unit tests added during the security-audit
+# hardening pass (see commits 16f532e..4741fad). Any regression in
+# the pure validators / decision matrices will fail the check and
+# block merge. Each repo is a separate job so a failure in one
+# doesn't hide failures in the others.
+
+on:
+  pull_request:
+    paths:
+      - 'backend-node/btc-assets-api/**'
+      - 'backend-node/solagram-backend/**'
+      - 'backend-node/mystery-bomb-box-backend/**'
+      - '.github/workflows/backend-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend-node/btc-assets-api/**'
+      - 'backend-node/solagram-backend/**'
+      - 'backend-node/mystery-bomb-box-backend/**'
+      - '.github/workflows/backend-tests.yml'
+
+jobs:
+  btc-assets-api:
+    name: btc-assets-api (vitest pure)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend-node/btc-assets-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend-node/btc-assets-api/package-lock.json
+      - name: install
+        run: npm ci --no-audit --no-fund
+      - name: typecheck
+        run: npx tsc --noEmit
+      - name: vitest (pure config — no external services)
+        run: npx vitest run --config vitest.pure.config.ts
+
+  solagram-backend:
+    name: solagram-backend (jest modules)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend-node/solagram-backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend-node/solagram-backend/package-lock.json
+      - name: install
+        run: npm ci --no-audit --no-fund
+      - name: typecheck
+        run: npx tsc --noEmit
+      # Scope to src/src/modules so the CI run matches what we run
+      # locally — the top-level jest also picks up stray decompiled
+      # spec files that aren't part of the audit scope.
+      - name: jest (modules only)
+        run: npx jest src/src/modules
+
+  mystery-bomb-box-backend:
+    name: mystery-bomb-box-backend (jest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend-node/mystery-bomb-box-backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend-node/mystery-bomb-box-backend/package-lock.json
+      - name: install
+        run: npm ci --no-audit --no-fund
+      - name: typecheck
+        run: npx tsc --noEmit
+      - name: jest
+        run: npx jest
