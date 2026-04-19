@@ -1,0 +1,59 @@
+name: rust-tests
+
+# Gates PRs on the Rust security-middleware crate's integration tests
+# (7 tests in tests/middleware.rs covering request-id minting, audit
+# sink behaviour, and rate-limit burst enforcement). This crate is the
+# shared foundation that all huehub / unipass actix-web services are
+# supposed to wrap; a silent regression here would break the whole
+# fleet's observability and DoS protection.
+#
+# We deliberately scope this workflow to the middleware crate only —
+# the wider backend-rust/ tree contains ~20 services, many decompiled
+# or half-reconstructed, and running `cargo test` over all of them
+# would both blow the CI budget and produce noise on unrelated
+# breakage. New services opt in by adding their own job below.
+
+on:
+  pull_request:
+    paths:
+      - 'backend-rust/huehub-security-middleware/**'
+      - '.github/workflows/rust-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend-rust/huehub-security-middleware/**'
+      - '.github/workflows/rust-tests.yml'
+
+jobs:
+  huehub-security-middleware:
+    name: huehub-security-middleware (cargo test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend-rust/huehub-security-middleware
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # The crate pins edition 2021; stable is sufficient. No nightly
+          # features are used so we do NOT opt into beta/nightly here —
+          # keeping the toolchain stable means a surprise nightly
+          # regression can't break the gate.
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend-rust/huehub-security-middleware
+      # fmt deliberately not gated — existing sources predate the
+      # current rustfmt style and reformatting would churn every file
+      # in this PR. Add a separate `rust-fmt.yml` once the crate is
+      # reformatted in a single dedicated commit.
+      - name: clippy
+        # -D warnings so any new lint fails the build. The crate is
+        # small enough that clippy noise is manageable; if this becomes
+        # too restrictive in future, narrow to `-D clippy::correctness`.
+        run: cargo clippy --all-targets -- -D warnings
+      - name: test
+        # The integration suite under tests/middleware.rs pulls
+        # actix-governor's time source; --test-threads=1 avoids
+        # flake on shared global state across tests.
+        run: cargo test --all-targets -- --test-threads=1

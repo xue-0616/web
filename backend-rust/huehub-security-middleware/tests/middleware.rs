@@ -119,7 +119,7 @@ async fn audit_sink_does_not_fail_request_when_sink_errors() {
             -> futures_util::future::LocalBoxFuture<'a, Result<(), SinkError>>
         {
             Box::pin(async {
-                Err(SinkError::Io(std::io::Error::new(std::io::ErrorKind::Other, "boom")))
+                Err(SinkError::Io(std::io::Error::other("boom")))
             })
         }
     }

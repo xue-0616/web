@@ -23,7 +23,7 @@
 //! the `#[ignore]` to `cfg_attr(not(ci), ignore)` once their CI is
 //! wired.
 
-#![allow(dead_code, unused_imports)] // template — downstream unwraps as needed
+#![allow(dead_code, unused_imports, unused_assignments)] // template — downstream unwraps as needed
 
 use std::time::Duration;
 

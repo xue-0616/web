@@ -2,11 +2,11 @@
 //!
 //! Two pre-baked profiles cover ~95% of our endpoints:
 //!
-//! - [`public`]   — 60 req/min per IP. For unauthenticated reads: quotes,
-//!                  health checks, catalog fetches.
-//! - [`signing`]  — 10 req/min per IP. For mutating / signing endpoints
-//!                  where a burst is almost always abuse (sign-tx,
-//!                  airdrop, password-reset).
+//! - [`public`] — 60 req/min per IP. For unauthenticated reads: quotes,
+//!   health checks, catalog fetches.
+//! - [`signing`] — 10 req/min per IP. For mutating / signing endpoints
+//!   where a burst is almost always abuse (sign-tx, airdrop,
+//!   password-reset).
 //!
 //! For anything exotic (per-wallet, weighted by request cost, etc.)
 //! callers build a [`GovernorConfig`] directly with [`custom`].
