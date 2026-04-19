@@ -20,6 +20,8 @@ on:
       - 'backend-rust/unipass-wallet-relayer/src/security.rs'
       - 'backend-rust/utxoswap-farm-sequencer/src/security.rs'
       - 'backend-rust/utxoswap-farm-sequencer/crates/types/src/parser.rs'
+      - 'backend-rust/huehub-token-distributor/src/security.rs'
+      - 'backend-rust/huehub-token-distributor/crates/distributor-types/src/lib.rs'
       - '.github/workflows/rust-tests.yml'
   push:
     branches: [main]
@@ -28,6 +30,8 @@ on:
       - 'backend-rust/unipass-wallet-relayer/src/security.rs'
       - 'backend-rust/utxoswap-farm-sequencer/src/security.rs'
       - 'backend-rust/utxoswap-farm-sequencer/crates/types/src/parser.rs'
+      - 'backend-rust/huehub-token-distributor/src/security.rs'
+      - 'backend-rust/huehub-token-distributor/crates/distributor-types/src/lib.rs'
       - '.github/workflows/rust-tests.yml'
 
 jobs:
@@ -118,3 +122,34 @@ jobs:
         run: cargo test -p types parser::tests
       - name: test security module (bin)
         run: cargo test --bin utxoswap-farm-sequencer security::tests
+
+  huehub-token-distributor-purefuncs:
+    # Gates the pure-function test suites added in the BUG-P3
+    # hardening pass:
+    #   - src/security.rs -> constant_time_eq + SecurePrivateKey (12 tests)
+    #   - crates/distributor-types/src/lib.rs ->
+    #       parse_token_amount / checked_sub_amount / validate_ckb_address
+    #       / DistributorTxStatus round-trip (17 tests)
+    # These three validators back every hot-path call in
+    # process_single_distribution / process_single_mint /
+    # mark_tx_failed — a regression in any of them leaks money or
+    # DoS-es the queue, so they deserve their own CI check.
+    # Same scope rationale as the other per-service jobs: we target
+    # the named test paths instead of --all-targets because the
+    # distributor's ckb_tx module and backend-daos crate still have
+    # stub-adjacent code that's not worth gating yet.
+    name: huehub-token-distributor (distributor-types + security::tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend-rust/huehub-token-distributor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend-rust/huehub-token-distributor
+      - name: test distributor-types (pure validators)
+        run: cargo test -p distributor-types
+      - name: test security module (bin)
+        run: cargo test --bin huehub-token-distributor security::tests

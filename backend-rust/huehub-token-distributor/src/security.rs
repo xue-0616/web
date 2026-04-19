@@ -294,3 +294,99 @@ impl std::fmt::Debug for SecurePrivateKey {
         f.write_str("SecurePrivateKey([REDACTED])")
     }
 }
+
+// ===========================================================================
+// Tests — same discipline as the relayer (065e2a8) and farm-sequencer
+// (0b6c579) hardening passes: gate the two pure functions that back
+// the P3 audit fixes. The middleware Transform impls are covered by
+// the shared huehub-security-middleware integration suite.
+// ===========================================================================
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- constant_time_eq --------------------------------------------------
+
+    #[test]
+    fn equal_slices_compare_equal() {
+        assert!(constant_time_eq(b"abcdef", b"abcdef"));
+    }
+
+    #[test]
+    fn differing_slices_of_same_length_are_caught_at_any_position() {
+        assert!(!constant_time_eq(b"abcdef", b"abcdeg"));
+        assert!(!constant_time_eq(b"abcdef", b"zbcdef"));
+    }
+
+    #[test]
+    fn length_mismatch_short_circuits() {
+        assert!(!constant_time_eq(b"abc", b"abcd"));
+        assert!(!constant_time_eq(b"", b"a"));
+    }
+
+    #[test]
+    fn both_empty_slices_compare_equal() {
+        assert!(constant_time_eq(b"", b""));
+    }
+
+    // --- SecurePrivateKey::from_hex ----------------------------------------
+
+    #[test]
+    fn from_hex_accepts_64_chars_lowercase() {
+        let key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let k = SecurePrivateKey::from_hex(key).expect("valid 64-char key");
+        assert_eq!(k.as_bytes().len(), 32);
+    }
+
+    #[test]
+    fn from_hex_accepts_0x_prefix() {
+        let key = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let k = SecurePrivateKey::from_hex(key).expect("0x-prefixed key must parse");
+        assert_eq!(k.as_bytes().len(), 32);
+    }
+
+    #[test]
+    fn from_hex_accepts_mixed_case() {
+        let key = "0123456789AbCdEf0123456789AbCdEf0123456789AbCdEf0123456789AbCdEf";
+        assert!(SecurePrivateKey::from_hex(key).is_ok());
+    }
+
+    #[test]
+    fn from_hex_rejects_wrong_length() {
+        assert!(SecurePrivateKey::from_hex(&"a".repeat(63)).is_err());
+        assert!(SecurePrivateKey::from_hex(&"a".repeat(65)).is_err());
+        assert!(SecurePrivateKey::from_hex("").is_err());
+        assert!(SecurePrivateKey::from_hex(&format!("0x{}", "a".repeat(63))).is_err());
+    }
+
+    #[test]
+    fn from_hex_rejects_non_hex_chars() {
+        let bad = format!("{}{}", "a".repeat(63), "z");
+        assert!(SecurePrivateKey::from_hex(&bad).is_err());
+    }
+
+    #[test]
+    fn from_hex_roundtrips_via_to_hex_string() {
+        let original = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let k = SecurePrivateKey::from_hex(original).unwrap();
+        assert_eq!(k.to_hex_string(), original);
+    }
+
+    #[test]
+    fn debug_impl_does_not_leak_key_material() {
+        let key = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+        let k = SecurePrivateKey::from_hex(key).unwrap();
+        let s = format!("{:?}", k);
+        assert_eq!(s, "SecurePrivateKey([REDACTED])");
+        assert!(!s.contains("dead"));
+        assert!(!s.contains("beef"));
+    }
+
+    #[test]
+    fn drop_path_is_reachable_for_32_byte_keys() {
+        let _k = SecurePrivateKey::from_hex(
+            "0101010101010101010101010101010101010101010101010101010101010101",
+        )
+        .unwrap();
+    }
+}
