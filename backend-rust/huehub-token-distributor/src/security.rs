@@ -84,9 +84,16 @@ where
         let expected_key = self.api_key.clone();
 
         Box::pin(async move {
-            // Skip auth for health/status endpoints (unauthenticated monitoring)
+            // Skip auth for observability endpoints. /health and
+            // /status are legacy names kept for rollout overlap;
+            // /healthz + /readyz + /metrics are the canonical set
+            // exposed by huehub-observability and the ones
+            // Kubernetes / Prometheus scrapers use.
             let path = req.path().to_string();
-            if path == "/health" || path == "/status" {
+            if matches!(
+                path.as_str(),
+                "/health" | "/status" | "/healthz" | "/readyz" | "/metrics"
+            ) {
                 let res = svc.call(req).await?;
                 return Ok(res.map_into_left_body());
             }

@@ -48,3 +48,4 @@ bech32 = "0.11"
 backend-daos = { path = "crates/backend-daos" }
 distributor-daos = { path = "crates/distributor-daos" }
 distributor-types = { path = "crates/distributor-types" }
+huehub-observability = { path = "../huehub-observability" }
