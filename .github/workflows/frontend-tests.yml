@@ -1,0 +1,117 @@
+name: frontend-tests
+
+# Gates PRs on the 6 OSS frontends (auto-dex, blinks-miniapp,
+# bomb-fun, huehub-dex, solagram-wallet, solagram-web) on two tiers:
+#
+# Tier 1 — frontend-unit (fast, always gate):
+#   - npm ci
+#   - typecheck (skipped on projects without the script)
+#   - vitest run (passWithNoTests so auto-dex — which only has E2E
+#     today — does not fail this tier)
+#
+# Tier 2 — frontend-e2e (slower, gate when either the frontend or
+# this workflow changes):
+#   - npm ci
+#   - playwright install --with-deps chromium
+#   - npm run test:e2e  (each project's playwright.config boots its
+#     own dev server on :5173 via webServer{})
+#
+# Tiers are split so a broken smoke test on one project can't block a
+# bugfix on another — matrix fail-fast is off for both jobs.
+
+on:
+  pull_request:
+    paths:
+      - 'frontend/*-oss/**'
+      - '.github/workflows/frontend-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/*-oss/**'
+      - '.github/workflows/frontend-tests.yml'
+
+jobs:
+  frontend-unit:
+    name: unit (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - auto-dex-site-oss
+          - blinks-miniapp-oss
+          - bomb-fun-site-oss
+          - huehub-dex-site-oss
+          - solagram-wallet-oss
+          - solagram-web-site-oss
+    defaults:
+      run:
+        working-directory: frontend/${{ matrix.project }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/${{ matrix.project }}/package-lock.json
+      - name: install
+        run: npm ci --no-audit --no-fund
+      - name: typecheck (if script present)
+        # --if-present silently skips on projects that don't expose
+        # a typecheck script (e.g. astro-based solagram-web-site-oss,
+        # which relies on astro's own check instead).
+        run: npm run typecheck --if-present
+      - name: vitest
+        # passWithNoTests covers the auto-dex case (only E2E today);
+        # the tier still runs so a future regression that accidentally
+        # deletes all tests is visible rather than silently green.
+        run: npx vitest run --passWithNoTests
+
+  frontend-e2e:
+    name: e2e (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - auto-dex-site-oss
+          - blinks-miniapp-oss
+          - bomb-fun-site-oss
+          - huehub-dex-site-oss
+          - solagram-wallet-oss
+          - solagram-web-site-oss
+    defaults:
+      run:
+        working-directory: frontend/${{ matrix.project }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/${{ matrix.project }}/package-lock.json
+      - name: install
+        run: npm ci --no-audit --no-fund
+      - name: install playwright browsers
+        # --with-deps pulls in the Debian packages chromium needs on
+        # ubuntu-latest. We pin to chromium only because the
+        # playwright.config in every project declares exactly one
+        # `{ name: 'chromium' }` project; no need to pay for firefox /
+        # webkit downloads.
+        run: npx playwright install --with-deps chromium
+      - name: playwright test
+        # Each project's playwright.config has webServer.command =
+        # `npm run dev`, so the runner spins the dev server itself;
+        # we don't need a separate step. 90s startup timeout is set
+        # per-config.
+        run: npm run test:e2e
+      - name: upload playwright trace on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-trace-${{ matrix.project }}
+          path: |
+            frontend/${{ matrix.project }}/test-results
+            frontend/${{ matrix.project }}/playwright-report
+          if-no-files-found: ignore
+          retention-days: 7
