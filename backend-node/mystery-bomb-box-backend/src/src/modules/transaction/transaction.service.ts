@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { TransactionEntity, TransactionStatus, TransactionType } from '../../database/entities/transaction.entity';
 import { DbService } from '../db/db.service';
 import { MysteryBoxDbService } from '../db/mystery-boxs.service';
@@ -21,7 +21,7 @@ import { StatusName } from '../../common/utils/error.code';
 import { validateBoxParams } from './validators';
 
 @Injectable()
-export class TransactionService implements OnModuleInit {
+export class TransactionService implements OnModuleInit, OnModuleDestroy {
     constructor(private readonly logger: AppLoggerService, private readonly appConfig: AppConfigService, private readonly dbService: DbService, private readonly mysteryBoxDbService: MysteryBoxDbService, private readonly grabMysteryBoxDbService: GrabMysteryBoxDbService, private readonly transactionDbService: TransactionDbService) {
         this.transactions = [];
         this.latestSuccessSignature = null;
@@ -35,8 +35,27 @@ export class TransactionService implements OnModuleInit {
     private mutex: any;
     private submitter: any;
     solanaClient: Connection;
+    // BUG-M7 (LOW) fix: flags that let watchTransactions co-operate
+    // with NestJS's module-destroy lifecycle. Without these, SIGTERM
+    // kills the process mid-iteration and any in-flight DB save can
+    // commit partially.
+    private shutdownRequested = false;
+    private watchStopped = false;
     async onModuleInit(): Promise<void> {
             await this.init();
+        }
+    async onModuleDestroy(): Promise<void> {
+            this.shutdownRequested = true;
+            // Give the loop up to 5 s to observe the flag and exit
+            // cleanly at a safe point (after a commit, before the
+            // next iteration). Beyond that Nest will force-kill.
+            const deadline = Date.now() + 5_000;
+            while (!this.watchStopped && Date.now() < deadline) {
+                await sleep(100);
+            }
+            this.logger.log(
+                `[onModuleDestroy] watchTransactions stopped=${this.watchStopped}`,
+            );
         }
     async init(): Promise<void> {
             const [transactions, latestSuccessTransaction] = await Promise.all([
@@ -74,7 +93,13 @@ export class TransactionService implements OnModuleInit {
             }
         }
     async watchTransactions(): Promise<void> {
-            while (true) {
+            // BUG-M7 (LOW) fix: cooperative shutdown. The loop now
+            // checks `shutdownRequested` between iterations and on
+            // each chunk of the 300 s error back-off, so SIGTERM /
+            // OnModuleDestroy can stop the poller without killing
+            // Node mid-commit.
+            this.watchStopped = false;
+            while (!this.shutdownRequested) {
                 try {
                     const blockHeight = await this.solanaClient.getBlockHeight('confirmed');
                     const signatures = await this.solanaClient.getSignaturesForAddress(this.submitter.publicKey, {
@@ -175,9 +200,17 @@ export class TransactionService implements OnModuleInit {
                 }
                 catch (error) {
                     this.logger.error(String(error));
-                    await sleep(300000);
+                    // BUG-M7: chunk the back-off so the shutdown flag
+                    // is re-checked every 100 ms instead of blocking
+                    // for a full 5 minutes.
+                    const errorBackoffDeadline = Date.now() + 300_000;
+                    while (!this.shutdownRequested && Date.now() < errorBackoffDeadline) {
+                        await sleep(100);
+                    }
                 }
             }
+            this.watchStopped = true;
+            this.logger.log('[watchTransactions] loop exited (shutdown requested)');
         }
     async createMysteryBoxTransaction(param: ActionParamInputDto, input: ActionInputDto): Promise<ActionOutputDto> {
             const { bombNumber, amount } = param;

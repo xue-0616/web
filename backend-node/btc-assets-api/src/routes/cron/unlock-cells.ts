@@ -4,6 +4,7 @@ import { Server } from 'http';
 import { ZodTypeProvider } from 'fastify-type-provider-zod';
 import container from '../../container';
 import Unlocker from '../../services/unlocker';
+import { withRedisLock, type RedisLockClient } from '../../utils/redis-lock';
 
 const unlockCellsCronRoute: FastifyPluginCallback<Record<never, never>, Server, ZodTypeProvider> = (
   fastify,
@@ -21,21 +22,27 @@ const unlockCellsCronRoute: FastifyPluginCallback<Record<never, never>, Server, 
     async () => {
       const logger = container.resolve<pino.BaseLogger>('logger');
       const unlocker: Unlocker = container.resolve('unlocker');
-      // BA-M1 FIX: Add Redis-based distributed lock to prevent concurrent execution
-      const redis = container.resolve('redis') as any;
-      const lockKey = 'rgbpp:cron:unlock-cells:lock';
-      const lockAcquired = await redis.set(lockKey, Date.now().toString(), 'EX', 300, 'NX');
-      if (!lockAcquired) {
-        logger.info('[unlock-cells] Another instance is already running, skipping');
+      // BUG-B4/B5 consolidation: shared withRedisLock helper.
+      const redis = container.resolve('redis') as RedisLockClient;
+      const result = await withRedisLock(
+        redis,
+        {
+          key: 'rgbpp:cron:unlock-cells:lock',
+          ttlSec: 300,
+          onSkip: () =>
+            logger.info('[unlock-cells] Another instance is already running, skipping'),
+        },
+        async () => {
+          try {
+            await unlocker.unlockCells();
+          } catch (err) {
+            logger.error(err);
+            fastify.Sentry.captureException(err);
+          }
+        },
+      );
+      if (!result.acquired) {
         return { skipped: true };
-      }
-      try {
-        await unlocker.unlockCells();
-      } catch (err) {
-        logger.error(err);
-        fastify.Sentry.captureException(err);
-      } finally {
-        await redis.del(lockKey);
       }
     },
   );
