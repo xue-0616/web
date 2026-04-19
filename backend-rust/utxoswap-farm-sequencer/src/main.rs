@@ -1,16 +1,20 @@
-use actix_web::{web, App, HttpServer, HttpResponse};
+use actix_web::{web, App, HttpServer};
+use huehub_observability::{
+    health::{self, ReadinessCheck, ReadinessReport},
+    logs, metrics as obs_metrics,
+};
 use sea_orm::Database;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod config;
 mod security;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+    // Observability: shared JSON-logs init + process-global Prometheus
+    // recorder. Mirrors the token-distributor rollout (3d53bfe) so the
+    // whole fleet emits the same schema.
+    logs::init("utxoswap-farm-sequencer");
+    let prom_handle = obs_metrics::install();
 
     let config = config::EnvConfig::from_env()?;
     let port = config.port;
@@ -86,6 +90,30 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    // Readiness aggregates both upstream deps. 503 => k8s removes the
+    // pod from Service endpoints but doesn't kill it (the pools manager
+    // and sequencer loops keep retrying in the background).
+    let db_ready = ctx.db().clone();
+    let redis_ready = ctx.redis_pool().clone();
+    let readiness = ReadinessCheck::new(move || {
+        let db = db_ready.clone();
+        let redis = redis_ready.clone();
+        async move {
+            let (db_ok, db_detail) = match db.ping().await {
+                Ok(()) => (true, None),
+                Err(e) => (false, Some(e.to_string())),
+            };
+            let (redis_ok, redis_detail) = match redis.get().await {
+                Ok(_) => (true, None),
+                Err(e) => (false, Some(e.to_string())),
+            };
+            ReadinessReport::from_pairs(&[
+                ("db", db_ok, db_detail),
+                ("redis", redis_ok, redis_detail),
+            ])
+        }
+    });
+
     tracing::info!("Starting farm-sequencer on port {}", port);
     HttpServer::new(move || {
         // --- CORS: restricted origins (falls back to deny-all if none configured) ---
@@ -107,7 +135,14 @@ async fn main() -> anyhow::Result<()> {
             .wrap(security::RateLimiter::new(100, 60, ctx.redis_pool().clone())) // 100 req/min per IP
             .wrap(security::ApiKeyAuth::new(farm_api_key.clone()))
             .wrap(tracing_actix_web::TracingLogger::default())
-            .route("/health", web::get().to(|| async { HttpResponse::Ok().json(serde_json::json!({"status":"ok"})) }))
+            // Observability routes (auth-skipped in security.rs).
+            .app_data(web::Data::new(prom_handle.clone()))
+            .app_data(web::Data::new(readiness.clone()))
+            .route("/healthz", web::get().to(health::healthz))
+            .route("/readyz", web::get().to(health::readyz))
+            .route("/metrics", web::get().to(obs_metrics::metrics_endpoint))
+            // Legacy name kept for rollout overlap.
+            .route("/health", web::get().to(health::healthz))
             .app_data(web::Data::new(ctx.clone()))
             .configure(api::configure_routes)
     })

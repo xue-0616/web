@@ -65,3 +65,4 @@ api-common = { path = "crates/api-common" }
 entity = { path = "crates/entity" }
 utils = { path = "crates/utils" }
 migration = { path = "crates/migration" }
+huehub-observability = { path = "../huehub-observability" }
