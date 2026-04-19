@@ -24,7 +24,14 @@
 
 /// RAII guard that flushes pending events on drop. A no-op when
 /// `SENTRY_DSN` is unset or the `sentry` crate is not linked.
-pub struct SentryGuard(#[cfg(feature = "__never_set")] ());
+//
+// The private `#[cfg(any())]`-gated tuple field keeps the struct
+// non-constructible by callers (they must go through `init_sentry`)
+// without requiring a real feature flag. `any()` with no predicates
+// is always false, so the field is elided in every build — unlike
+// `feature = "__never_set"`, it doesn't trigger the `unexpected_cfgs`
+// lint under `-D warnings`.
+pub struct SentryGuard(#[cfg(any())] ());
 
 /// Initialise Sentry if `SENTRY_DSN` is set. Safe to call without the
 /// `sentry` crate present; becomes a compile-time no-op that returns
@@ -39,7 +46,7 @@ pub fn init_sentry(_service: &str, _version: &str) -> SentryGuard {
     // boilerplate from the module docstring. We keep the function
     // shape stable so adopting a real impl later is a single PR.
     SentryGuard(
-        #[cfg(feature = "__never_set")]
+        #[cfg(any())]
         (),
     )
 }

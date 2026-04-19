@@ -2,20 +2,19 @@
 //!
 //! Three modules, each self-contained so callers opt in incrementally:
 //!
-//! - [`logs`]    — initialise `tracing` with a structured JSON formatter
-//!                 gated by `RUST_LOG`. Sets the default crate filter so
-//!                 noisy libraries (`h2`, `hyper`, `sqlx`) don't bury
-//!                 our app events.
+//! - [`logs`] — initialise `tracing` with a structured JSON formatter
+//!   gated by `RUST_LOG`. Sets the default crate filter so noisy
+//!   libraries (`h2`, `hyper`, `sqlx`) don't bury our app events.
 //!
 //! - [`metrics`] — builds a `PrometheusHandle` on a fixed global bucket
-//!                 set and installs the recorder. Hook the returned
-//!                 handle into [`metrics::metrics_endpoint`] to expose
-//!                 `/metrics` from the same actix app.
+//!   set and installs the recorder. Hook the returned handle into
+//!   [`metrics::metrics_endpoint`] to expose `/metrics` from the same
+//!   actix app.
 //!
-//! - [`health`]  — `GET /healthz` (liveness) and `GET /readyz`
-//!                 (readiness). Liveness is a static `200 OK`; readiness
-//!                 invokes a user-supplied closure so services can
-//!                 return 503 while warm-up / migration is pending.
+//! - [`health`] — `GET /healthz` (liveness) and `GET /readyz`
+//!   (readiness). Liveness is a static `200 OK`; readiness invokes a
+//!   user-supplied closure so services can return 503 while warm-up /
+//!   migration is pending.
 //!
 //! When the `otel` cargo feature is enabled, [`logs::init_with_otlp`]
 //! also installs an OTLP tracer that forwards `tracing` spans to a

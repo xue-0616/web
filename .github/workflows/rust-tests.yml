@@ -17,6 +17,7 @@ on:
   pull_request:
     paths:
       - 'backend-rust/huehub-security-middleware/**'
+      - 'backend-rust/huehub-observability/**'
       - 'backend-rust/unipass-wallet-relayer/src/security.rs'
       - 'backend-rust/utxoswap-farm-sequencer/src/security.rs'
       - 'backend-rust/utxoswap-farm-sequencer/crates/types/src/parser.rs'
@@ -27,6 +28,7 @@ on:
     branches: [main]
     paths:
       - 'backend-rust/huehub-security-middleware/**'
+      - 'backend-rust/huehub-observability/**'
       - 'backend-rust/unipass-wallet-relayer/src/security.rs'
       - 'backend-rust/utxoswap-farm-sequencer/src/security.rs'
       - 'backend-rust/utxoswap-farm-sequencer/crates/types/src/parser.rs'
@@ -66,6 +68,41 @@ jobs:
         # The integration suite under tests/middleware.rs pulls
         # actix-governor's time source; --test-threads=1 avoids
         # flake on shared global state across tests.
+        run: cargo test --all-targets -- --test-threads=1
+
+  huehub-observability:
+    # Gates the shared observability crate (logs / metrics / health /
+    # errors). The integration suite under tests/smoke.rs covers:
+    #   - /healthz returns 200 JSON
+    #   - /readyz returns 200 when all deps healthy
+    #   - /readyz returns 503 when any dep fails
+    #   - /metrics renders Prometheus exposition format
+    # Same rationale as huehub-security-middleware: one dependency
+    # used by every fund-critical Rust service, so a regression here
+    # is a fleet-wide regression.
+    name: huehub-observability (cargo clippy + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend-rust/huehub-observability
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend-rust/huehub-observability
+      - name: clippy
+        # Clippy with -D warnings catches the unexpected_cfgs regression
+        # class that slipped into this crate's original src/errors.rs
+        # (feature = "__never_set"). Keeping the gate on prevents
+        # future reverts.
+        run: cargo clippy --all-targets -- -D warnings
+      - name: test
+        # --test-threads=1 because the metrics recorder installs a
+        # process-global singleton; parallel tests would race to
+        # install it and one would get "recorder already installed".
         run: cargo test --all-targets -- --test-threads=1
 
   unipass-wallet-relayer-security:
