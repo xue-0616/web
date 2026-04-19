@@ -17,11 +17,13 @@ on:
   pull_request:
     paths:
       - 'backend-rust/huehub-security-middleware/**'
+      - 'backend-rust/unipass-wallet-relayer/src/security.rs'
       - '.github/workflows/rust-tests.yml'
   push:
     branches: [main]
     paths:
       - 'backend-rust/huehub-security-middleware/**'
+      - 'backend-rust/unipass-wallet-relayer/src/security.rs'
       - '.github/workflows/rust-tests.yml'
 
 jobs:
@@ -57,3 +59,29 @@ jobs:
         # actix-governor's time source; --test-threads=1 avoids
         # flake on shared global state across tests.
         run: cargo test --all-targets -- --test-threads=1
+
+  unipass-wallet-relayer-security:
+    # Gates only the pure-function unit tests in src/security.rs
+    # (constant_time_eq + SecurePrivateKey hex parsing / redaction).
+    # We deliberately do NOT run the full workspace cargo test because
+    # the relayer has decompiled / stubbed handler crates that don't
+    # even compile cleanly; that bigger remediation is tracked in
+    # backend-rust/SECURITY_AUDIT_3_PROJECTS.md and will get its own
+    # job when those stubs are filled in.
+    name: unipass-wallet-relayer src/security.rs (cargo test security::tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend-rust/unipass-wallet-relayer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend-rust/unipass-wallet-relayer
+      - name: test security module
+        # Targeting the named test path keeps CI focused on the
+        # 12 pure-function tests added in the BUG-P2 hardening pass
+        # and avoids pulling decompiled sibling crates into the
+        # gating path.
+        run: cargo test --bin unipass-wallet-relayer security::tests

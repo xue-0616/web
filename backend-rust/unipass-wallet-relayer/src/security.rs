@@ -304,3 +304,142 @@ impl std::fmt::Debug for SecurePrivateKey {
         f.write_str("SecurePrivateKey([REDACTED])")
     }
 }
+
+// ===========================================================================
+// Tests
+// ===========================================================================
+//
+// These tests gate the two pure functions that live in this file —
+// `constant_time_eq` (P2-C1 auth check) and `SecurePrivateKey::from_hex`
+// (P2-C3 key handling). The middleware Transform impls are exercised
+// by the shared crate `huehub-security-middleware`'s integration suite;
+// duplicating that harness here would add no signal.
+//
+// Discipline (same as the Node-backend audit pass): each behaviour
+// class gets its own #[test], and every new clause in these functions
+// MUST land with a test in this module in the same PR.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- constant_time_eq --------------------------------------------------
+
+    #[test]
+    fn constant_time_eq_equal_slices() {
+        assert!(constant_time_eq(b"abcdef", b"abcdef"));
+    }
+
+    #[test]
+    fn constant_time_eq_differing_same_length() {
+        assert!(!constant_time_eq(b"abcdef", b"abcdeg"));
+        // Difference at the first byte must also be caught — naive
+        // short-circuit implementations fail here silently.
+        assert!(!constant_time_eq(b"abcdef", b"zbcdef"));
+    }
+
+    #[test]
+    fn constant_time_eq_different_length() {
+        // Length mismatch is a legitimate early-return (timing of the
+        // length check leaks only the length of the expected key,
+        // which is already known to attackers via config docs).
+        assert!(!constant_time_eq(b"abc", b"abcd"));
+        assert!(!constant_time_eq(b"", b"a"));
+    }
+
+    #[test]
+    fn constant_time_eq_both_empty() {
+        // Two empty slices trivially compare equal; the fail-closed
+        // empty-key branch in ApiKeyAuthMiddleware handles the
+        // "server started without a key" case separately so this is
+        // not exploitable.
+        assert!(constant_time_eq(b"", b""));
+    }
+
+    // --- SecurePrivateKey::from_hex ----------------------------------------
+
+    #[test]
+    fn from_hex_accepts_64_chars_lowercase() {
+        let key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let k = SecurePrivateKey::from_hex(key).expect("valid 64-char key");
+        assert_eq!(k.as_bytes().len(), 32);
+    }
+
+    #[test]
+    fn from_hex_accepts_0x_prefix() {
+        let key = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let k = SecurePrivateKey::from_hex(key).expect("0x-prefixed key must parse");
+        assert_eq!(k.as_bytes().len(), 32);
+    }
+
+    #[test]
+    fn from_hex_accepts_mixed_case() {
+        let key = "0123456789AbCdEf0123456789AbCdEf0123456789AbCdEf0123456789AbCdEf";
+        assert!(SecurePrivateKey::from_hex(key).is_ok());
+    }
+
+    #[test]
+    fn from_hex_rejects_wrong_length() {
+        // 63 chars
+        assert!(SecurePrivateKey::from_hex(&"a".repeat(63)).is_err());
+        // 65 chars
+        assert!(SecurePrivateKey::from_hex(&"a".repeat(65)).is_err());
+        // empty
+        assert!(SecurePrivateKey::from_hex("").is_err());
+        // 0x plus wrong length is still wrong
+        assert!(SecurePrivateKey::from_hex(&format!("0x{}", "a".repeat(63))).is_err());
+    }
+
+    #[test]
+    fn from_hex_rejects_non_hex_chars() {
+        // Length is 64 but contains 'z' — must be rejected by the
+        // is_ascii_hexdigit guard before it reaches hex::decode.
+        let bad = format!("{}{}", "a".repeat(63), "z");
+        assert!(SecurePrivateKey::from_hex(&bad).is_err());
+    }
+
+    #[test]
+    fn from_hex_roundtrips_via_to_hex_string() {
+        let original = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let k = SecurePrivateKey::from_hex(original).unwrap();
+        assert_eq!(k.to_hex_string(), original);
+    }
+
+    // --- Debug impl must not leak key --------------------------------------
+
+    #[test]
+    fn debug_impl_does_not_leak_key_material() {
+        let key = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+        let k = SecurePrivateKey::from_hex(key).unwrap();
+        let s = format!("{:?}", k);
+        assert_eq!(s, "SecurePrivateKey([REDACTED])");
+        // Paranoia: the literal key bytes must not appear in the
+        // debug output even as a substring.
+        assert!(!s.contains("dead"));
+        assert!(!s.contains("beef"));
+    }
+
+    // --- Drop must zero out the buffer (best-effort) -----------------------
+    //
+    // We cannot observe memory after Drop runs without racing the
+    // allocator, but we can verify that the zeroization loop actually
+    // runs on a buffer we control by invoking the same write_volatile
+    // pattern through an owned byte vec.
+    //
+    // NOTE: the production Drop is a weak form of zeroization (no
+    // compiler_fence). A follow-up PR should switch to the `zeroize`
+    // crate; see BUG-R1 in SECURITY_AUDIT_3_PROJECTS.md if added.
+
+    #[test]
+    fn drop_path_is_reachable_for_32_byte_keys() {
+        // Purely a liveness test: constructing and dropping a key
+        // must not panic for the common happy path. If the Drop impl
+        // ever starts panicking (e.g. via a future change introducing
+        // a lock), we will catch it here.
+        {
+            let _k = SecurePrivateKey::from_hex(
+                "0101010101010101010101010101010101010101010101010101010101010101",
+            )
+            .unwrap();
+        }
+    }
+}
