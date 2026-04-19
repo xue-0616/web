@@ -1,0 +1,201 @@
+# Integration compose for the 6 fund-critical services hardened in this
+# repo. Intended for **local / staging rehearsal**, not production.
+#
+#   docker compose -f docker-compose.integration.yml --env-file .env.integration up --build
+#
+# What's in here:
+#   Infra:    MySQL 8, Redis 7
+#   Node:     btc-assets-api, solagram-backend, mystery-bomb-box-backend
+#   Rust:     unipass-wallet-relayer, utxoswap-farm-sequencer, huehub-token-distributor
+#
+# Every service reads its config exclusively from env. Copy
+# `.env.integration.example` → `.env.integration` and fill it in before
+# `up --build`. No secrets ship in this file.
+#
+# NOT production-ready:
+#   - volumes are bind-mounts under ./data (no cloud backing, no TLS)
+#   - MySQL uses the integration-test password from .env.integration
+#   - no external reverse proxy; each service exposes a host port
+#   - Sentry DSN / Prometheus scraping is optional (see observability section)
+#
+# Run the deployment rehearsal walkthrough in `docs/deployment-rehearsal.md`.
+
+name: up-rebuild-integration
+
+x-rust-build: &rust-build
+  context: ./backend-rust
+  dockerfile: Dockerfile.rust-service
+
+services:
+  # ── Infrastructure ────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env.integration}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-integration}
+      MYSQL_USER: ${MYSQL_USER:-integration}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env.integration}
+    ports: ["3306:3306"]
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports: ["6379:6379"]
+    volumes:
+      - ./data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+
+  # ── Node backends ─────────────────────────────────────────────────
+  btc-assets-api:
+    build:
+      context: ./backend-node/btc-assets-api
+    restart: unless-stopped
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    ports: ["3000:3000"]
+    environment:
+      NODE_ENV: production
+      ADDRESS: 0.0.0.0
+      PORT: 3000
+      DATABASE_URL: mysql://${MYSQL_USER:-integration}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-integration}
+      REDIS_URL: redis://redis:6379
+      CKB_RPC_URL: ${CKB_RPC_URL:-}
+      BTC_RPC_URL: ${BTC_RPC_URL:-}
+      SENTRY_DSN: ${SENTRY_DSN_BTC_ASSETS:-}
+
+  solagram-backend:
+    build:
+      context: ./backend-node/solagram-backend
+    restart: unless-stopped
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    ports: ["3001:3001"]
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_HOST: mysql
+      DATABASE_PORT: 3306
+      DATABASE_USER: ${MYSQL_USER:-integration}
+      DATABASE_PASSWORD: ${MYSQL_PASSWORD}
+      DATABASE_NAME: ${MYSQL_DATABASE:-integration}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SOLANA_RPC_URL: ${SOLANA_RPC_URL:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.integration}
+      KEYBLOB_ENCRYPTION_KEY: ${KEYBLOB_ENCRYPTION_KEY:?set KEYBLOB_ENCRYPTION_KEY (hex, 32 bytes)}
+      SENTRY_DSN: ${SENTRY_DSN_SOLAGRAM:-}
+
+  mystery-bomb-box-backend:
+    build:
+      context: ./backend-node/mystery-bomb-box-backend
+    restart: unless-stopped
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    ports: ["3002:3002"]
+    environment:
+      NODE_ENV: production
+      PORT: 3002
+      DATABASE_HOST: mysql
+      DATABASE_PORT: 3306
+      DATABASE_USER: ${MYSQL_USER:-integration}
+      DATABASE_PASSWORD: ${MYSQL_PASSWORD}
+      DATABASE_NAME: ${MYSQL_DATABASE:-integration}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SOLANA_RPC_URL: ${SOLANA_RPC_URL:-}
+      BOMB_BOX_OPERATOR_KEY: ${BOMB_BOX_OPERATOR_KEY:-}
+      SENTRY_DSN: ${SENTRY_DSN_BOMBBOX:-}
+
+  # ── Rust fund-critical services ───────────────────────────────────
+  # All three use ./backend-rust/ as build context so the relative
+  # `../huehub-observability` path resolves.
+  unipass-wallet-relayer:
+    build:
+      <<: *rust-build
+      args:
+        SERVICE: unipass-wallet-relayer
+    image: unipass-wallet-relayer:integration
+    restart: unless-stopped
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    ports: ["8085:8085"]
+    environment:
+      PORT: 8085
+      DATABASE_URL: mysql://${MYSQL_USER:-integration}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-integration}
+      REDIS_URL: redis://redis:6379
+      RUST_LOG: info
+      RELAYER_PRIVATE_KEY: ${RELAYER_PRIVATE_KEY:?set RELAYER_PRIVATE_KEY in .env.integration}
+      RELAYER_API_KEY: ${RELAYER_API_KEY:?set RELAYER_API_KEY in .env.integration}
+      CORS_ALLOWED_ORIGINS: ${RELAYER_CORS_ORIGINS:-}
+
+  utxoswap-farm-sequencer:
+    build:
+      <<: *rust-build
+      args:
+        SERVICE: utxoswap-farm-sequencer
+    image: utxoswap-farm-sequencer:integration
+    restart: unless-stopped
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    ports: ["8086:8086"]
+    environment:
+      PORT: 8086
+      DATABASE_URL: mysql://${MYSQL_USER:-integration}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-integration}
+      REDIS_URL: redis://redis:6379
+      RUST_LOG: info
+      FARM_API_KEY: ${FARM_API_KEY:?set FARM_API_KEY in .env.integration}
+      FARM_ADMIN_ADDRESSES: ${FARM_ADMIN_ADDRESSES:-}
+      FARM_ADMIN_PUBKEYS: ${FARM_ADMIN_PUBKEYS:-}
+      CKB_RPC_URL: ${CKB_RPC_URL:-}
+      CORS_ALLOWED_ORIGINS: ${FARM_CORS_ORIGINS:-}
+
+  huehub-token-distributor:
+    build:
+      <<: *rust-build
+      args:
+        SERVICE: huehub-token-distributor
+    image: huehub-token-distributor:integration
+    restart: unless-stopped
+    depends_on:
+      mysql: { condition: service_healthy }
+    ports: ["8087:8087"]
+    environment:
+      PORT: 8087
+      DATABASE_URL: mysql://${MYSQL_USER:-integration}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-integration}
+      RUST_LOG: info
+      # Distributor is fail-closed: ENABLE_CKB_SUBMISSION stays `false` for
+      # integration rehearsal so txs never reach a real CKB node. Flip to
+      # `true` only against a devnet once CKB_* env vars are filled in.
+      ENABLE_CKB_SUBMISSION: ${ENABLE_CKB_SUBMISSION:-false}
+      CKB_RPC_URL: ${CKB_RPC_URL:-}
+      CKB_DISTRIBUTOR_ADDRESS: ${CKB_DISTRIBUTOR_ADDRESS:-}
+      DISTRIBUTOR_PRIVATE_KEY: ${DISTRIBUTOR_PRIVATE_KEY:-}
+      DISTRIBUTOR_API_KEY: ${DISTRIBUTOR_API_KEY:?set DISTRIBUTOR_API_KEY in .env.integration}
+      CORS_ALLOWED_ORIGINS: ${DISTRIBUTOR_CORS_ORIGINS:-}
+
+# ── Port map ──────────────────────────────────────────────────────
+#   3000  btc-assets-api           /health
+#   3001  solagram-backend         /health
+#   3002  mystery-bomb-box-backend /health
+#   3306  mysql
+#   6379  redis
+#   8085  unipass-wallet-relayer   /health  /healthz  /readyz  /metrics
+#   8086  utxoswap-farm-sequencer  /health  /healthz  /readyz  /metrics
+#   8087  huehub-token-distributor /health

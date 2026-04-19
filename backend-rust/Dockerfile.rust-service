@@ -1,0 +1,73 @@
+# syntax=docker/dockerfile:1.7
+#
+# Shared multi-stage Dockerfile for the 3 fund-critical Rust services:
+#   - unipass-wallet-relayer
+#   - utxoswap-farm-sequencer
+#   - huehub-token-distributor
+#
+# Each of these services is its own Cargo workspace but pulls the shared
+# crate `../huehub-observability` via relative path. So the build context
+# MUST be `backend-rust/` (not the service directory).
+#
+# Build:
+#   docker build \
+#     -f backend-rust/Dockerfile.rust-service \
+#     --build-arg SERVICE=unipass-wallet-relayer \
+#     -t unipass-wallet-relayer:latest \
+#     backend-rust/
+#
+# See docker-compose.integration.yml for the full wiring.
+
+ARG SERVICE
+
+# ---- Stage 1: build --------------------------------------------------------
+FROM rust:1.82-slim-bookworm AS builder
+ARG SERVICE
+WORKDIR /build
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends pkg-config libssl-dev ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# Copy the shared observability crate first (relative dep `../huehub-observability`
+# resolved from the service workspace root).
+COPY huehub-observability ./huehub-observability
+
+# Copy the service workspace (includes its crates/ subdir and Cargo.lock).
+COPY ${SERVICE} ./${SERVICE}
+
+WORKDIR /build/${SERVICE}
+
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/build/${SERVICE}/target,sharing=locked \
+    cargo build --release --locked --bin ${SERVICE} \
+ && cp target/release/${SERVICE} /out-bin \
+ && strip /out-bin
+
+# ---- Stage 2: runtime ------------------------------------------------------
+FROM debian:bookworm-slim AS runtime
+ARG SERVICE
+ENV SERVICE_NAME=${SERVICE}
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates libssl3 curl \
+ && rm -rf /var/lib/apt/lists/* \
+ && useradd --system --home /app --shell /usr/sbin/nologin svc
+
+WORKDIR /app
+USER svc:svc
+ENV RUST_LOG=info
+ENV LOG_OUTPUT_FORMAT=json
+
+COPY --from=builder --chown=svc:svc /out-bin /usr/local/bin/service
+
+# Compose overrides the port via env; this is just for docs / default probes.
+EXPOSE 8080
+
+# `/health` is present on all three services (legacy alias). Newer code also
+# exposes `/healthz` from huehub-observability, but /health is the common
+# denominator and survives any partial rollout.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD curl -sf "http://127.0.0.1:${PORT:-8080}/health" || exit 1
+
+ENTRYPOINT ["/usr/local/bin/service"]
