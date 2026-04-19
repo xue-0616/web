@@ -1,0 +1,4 @@
+upstream: utxo-stack-sdk
+local: ../../upstream/utxo-stack-sdk
+subpath: packages/branch + packages/leap + examples/
+builder: pnpm-monorepo + 薄 UI

@@ -1,0 +1,31 @@
+[package]
+name = "utils"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+sea-orm.workspace = true
+deadpool-redis.workspace = true
+redis.workspace = true
+reqwest.workspace = true
+reqwest-middleware.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+tokio.workspace = true
+rust_decimal.workspace = true
+hex.workspace = true
+ckb-jsonrpc-types.workspace = true
+actix-web.workspace = true
+jsonwebtoken.workspace = true
+futures.workspace = true
+blake2b-rs.workspace = true
+num-bigint.workspace = true
+
+api-common = { path = "../api-common" }
+entity_crate = { package = "entity", path = "../entity" }
+types = { path = "../types" }
+intent-solver = { path = "../intent-solver" }

@@ -1,0 +1,44 @@
+[workspace]
+members = ["crates/config", "crates/lindell"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
+actix-web = "4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"
+thiserror = "1"
+uuid = { version = "1", features = ["v4"] }
+# Lindell 2017 2PC-ECDSA (ZenGo-X)
+curv-kzen = "0.9"
+multi-party-ecdsa = "0.8"
+paillier = { package = "kzen-paillier", version = "0.4" }
+zk-paillier = "0.4"
+sha2 = "0.10"
+hmac = "0.12"
+base64 = "0.21"
+
+[package]
+name = "tss-ecdsa-server"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+actix-web.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+uuid.workspace = true
+envy = "0.4"
+sha2.workspace = true
+config_crate = { package = "config", path = "crates/config" }
+lindell = { path = "crates/lindell" }

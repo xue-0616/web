@@ -1,0 +1,71 @@
+{
+    "polygon-mainnet": [
+        "https://polygon-mainnet.g.alchemy.com/v2/EPGz4KfuZJp-W1KWakR_DSOwg-cMbuPt",
+        "https://polygon-mainnet.nodereal.io/v1/a5ca562b9b1840989da5632e8ded7a49",
+        "https://go.getblock.io/d2c55577404444bcb13df48a07249322"
+    ],
+    "polygon-mumbai": [
+        "https://polygon-mumbai.g.alchemy.com/v2/BoV-W3O7QoMcFiljKK8FrCyd2hIEI8rc",
+        "https://go.getblock.io/918e76000e0f4d19a7a2ffb2b09c5513"
+    ],
+    "bsc-mainnet": [
+        "https://bsc-mainnet.nodereal.io/v1/3611e830855047a3956d4ba3f641a769",
+        "https://go.getblock.io/d9449a7bde7a42359919cbecd5200117"
+    ],
+    "bsc-testnet": [
+        "https://bsc-testnet.nodereal.io/v1/a8e6602c6ea4481c8ae778a13f61be45",
+        "https://bsc-testnet.s.chainbase.online/v1/2ETNKVbtd6g3xnEBrkvxXanPTvA",
+        "https://go.getblock.io/80b5a111ad1c46f3b6bafa00b41809aa"
+    ],
+    "eth-mainnet": [
+        "https://eth-mainnet.g.alchemy.com/v2/Jnv3js-nshRvRFZqygotLgAlEIRslXzn",
+        "https://go.getblock.io/064bb365df1841eea0c6584f0a02e0ea"
+    ],
+    "eth-goerli": [
+        "https://eth-goerli.g.alchemy.com/v2/PX8Fyovce-nmh_2tE7KrW-72-paFO500",
+        "https://eth-goerli.nodereal.io/v1/a5ca562b9b1840989da5632e8ded7a49",
+        "https://go.getblock.io/0f556d788bc84798b19858565c1ac444"
+    ],
+    "arbitrum-mainnet": [
+        "https://arb-mainnet.g.alchemy.com/v2/pSEQxA_du0VqHDWJr0FToV9_GRwS5pWo",
+        "https://go.getblock.io/b1bd65a08f204537aa6f7d5cdf360bc9"
+    ],
+    "arbitrum-testnet": [
+        "https://arb-goerli.g.alchemy.com/v2/s4w6xTxaB2rNujZDhHBMmJPIBs3edBjy",
+        "https://go.getblock.io/7984c0183a314b4e97a009684abb78a0"
+    ],
+    "rangers-mainnet": [
+        "https://mainnet.rangersprotocol.com/api/jsonrpc"
+    ],
+    "rangers-robin": [
+        "https://robin.rangersprotocol.com/api/jsonrpc"
+    ],
+    "platon-mainnet": [
+        "https://openapi2.platon.network/rpc"
+    ],
+    "platon-testnet": [
+        "https://devnet2openapi.platon.network/rpc"
+    ],
+    "avalanche-testnet": [
+        "https://rpc.ankr.com/avalanche_fuji",
+        "https://go.getblock.io/6532743e5391453d9a66aa0413a29c1f/ext/bc/C/rpc"
+    ],
+    "avalanche-mainnet": [
+        "https://open-platform.nodereal.io/d8a10491afeb461596f7a38cef2d252e/avalanche-c/ext/bc/C/rpc",
+        "https://open-platform.nodereal.io/a5ca562b9b1840989da5632e8ded7a49/avalanche-c/ext/bc/C/rpc",
+        "https://go.getblock.io/54fa2367963649a3939995b9101e8483/ext/bc/C/rpc"
+    ],
+    "kcc-testnet": [
+        "https://rpc-testnet.kcc.network/"
+    ],
+    "kcc-mainnet": [
+        "https://rpc-mainnet.kcc.network/",
+        "https://go.getblock.io/e103eb8c5ca4479ebd9e8732f48e0f6f"
+    ],
+    "okc-testnet": [
+        "https://exchaintestrpc.okex.org/"
+    ],
+    "okc-mainnet": [
+        "https://exchainrpc.okex.org/"
+    ]
+}

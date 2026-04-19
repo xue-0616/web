@@ -1,0 +1,4 @@
+upstream: smart-account-vite-demo
+local: ../../upstream/smart-account-vite-demo
+subpath: root (Vite + React)
+builder: vite

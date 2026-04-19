@@ -1,0 +1,16 @@
+[package]
+name = "validator-submitter"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+ethers.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+hex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+reqwest.workspace = true
+api = { path = "../api" }
+contracts-abi = { path = "../contracts-abi" }
+validator-signer = { path = "../validator-signer" }

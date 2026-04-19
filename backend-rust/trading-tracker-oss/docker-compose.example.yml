@@ -1,0 +1,43 @@
+# Minimal docker-compose for running trading-tracker-oss standalone.
+# For the full stack (with dexauto-server + postgres + redis + clickhouse),
+# see the repo-root `docker-compose.dev.yml` (to be added in Track D).
+
+services:
+  trading-tracker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: trading-tracker-oss:dev
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # Option A — point at a mounted config.toml (recommended).
+      TRADING_TRACKER_CONFIG: /app/config.toml
+      # Option B — env-var only mode (comment out TRADING_TRACKER_CONFIG).
+      # TRADING_TRACKER_SUBSTREAMS_ENDPOINT: https://mainnet.sol.streamingfast.io:443
+      # TRADING_TRACKER_SUBSTREAMS_API_KEY:  ${SF_API_KEY:-}
+      # TRADING_TRACKER_SOLANA_RPC:         https://api.mainnet-beta.solana.com
+      # TRADING_TRACKER_START_BLOCK:        300000000
+      # TRADING_TRACKER_DB_PATH:            /app/data/cursor.redb
+      # TRADING_TRACKER_LOG_OUTPUT_FORMAT:  json
+      # TRADING_TRACKER_RPC_LISTEN_ADDR:    0.0.0.0:8080
+      RUST_LOG: "info,trading_tracker_oss=debug"
+    volumes:
+      # Persistent cursor database — without this, each container restart
+      # rewinds to start_block and re-ingests everything.
+      - tracker-data:/app/data
+      # Mount your config.toml read-only. Comment out if using env-var mode.
+      - ./config.toml:/app/config.toml:ro
+      # Mount the .spkg as well (config references it by path inside the
+      # container — keep paths consistent).
+      - ./substreams:/app/substreams:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  tracker-data:

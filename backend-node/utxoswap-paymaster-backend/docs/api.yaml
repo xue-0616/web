@@ -1,0 +1,437 @@
+openapi: 3.0.0
+paths:
+  /api/v1/health:
+    get:
+      operationId: HealthCheckerController_check
+      parameters: []
+      responses:
+        '200':
+          description: The Health Check is successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  info:
+                    type: object
+                    example: &ref_0
+                      database: &ref_1
+                        status: up
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+                    nullable: true
+                  error:
+                    type: object
+                    example: {}
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+                    nullable: true
+                  details:
+                    type: object
+                    example: *ref_0
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+        '503':
+          description: The Health Check is not successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: error
+                  info:
+                    type: object
+                    example: *ref_0
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+                    nullable: true
+                  error:
+                    type: object
+                    example:
+                      redis: &ref_2
+                        status: down
+                        message: Could not connect
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+                    nullable: true
+                  details:
+                    type: object
+                    example:
+                      database: *ref_1
+                      redis: *ref_2
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+  /api/v1/paymaster/estimate-udt-amount:
+    post:
+      operationId: PaymasterController_getUDTQuota
+      summary: Get UDT Quota
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CKBScript'
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/SwaggerBaseApiResponseFor function
+                  String() { [native code] } 
+      tags: &ref_3
+        - Paymaster
+  /api/v1/paymaster/get-ckb-cell:
+    post:
+      operationId: PaymasterController_getCkbCell
+      summary: Get CKB Cell
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CkbCellInputDto'
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/SwaggerBaseApiResponseFor class
+                  CkbCellOutputDto {
+
+                  } 
+      tags: *ref_3
+  /api/v1/paymaster/request-paymaster-sig:
+    post:
+      operationId: PaymasterController_requestPaymasterSig
+      summary: Request Paymaster Signature
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymasterSigInputDto'
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/SwaggerBaseApiResponseFor class
+                  PaymasterSigOutputDto {
+
+                  } 
+      tags: *ref_3
+info:
+  title: UTXOSwap API
+  description: UTXOSwap API description
+  version: '1.0'
+  contact: {}
+tags: []
+servers: []
+components:
+  schemas:
+    CKBScript:
+      type: object
+      properties:
+        args:
+          type: string
+          description: hex string with 0x prefix
+        codeHash:
+          type: string
+          description: hash256
+        hashType:
+          type: string
+          description: 'enum:  ''data'' | ''type'' | ''data1'' | ''data2'''
+      required:
+        - args
+        - codeHash
+        - hashType
+    'SwaggerBaseApiResponseFor function String() { [native code] } ':
+      type: object
+      properties:
+        code:
+          type: number
+          description: >-
+            200:success;4000:parameter exception 4001:Item invalid;4002:Service
+            fee not match;4003:Psbt not match;4004:Ckb tx not
+            match;4005:Signature error,4006:Item is existing
+        message:
+          type: string
+        data:
+          type: string
+      required:
+        - code
+        - message
+        - data
+    CkbCellInputDto:
+      type: object
+      properties:
+        address:
+          type: string
+          description: user's ckb address
+        assetType:
+          description: user's udt type script
+          allOf:
+            - $ref: '#/components/schemas/CKBScript'
+        intentArgs:
+          type: string
+          description: >-
+            user' intent cell lock args, only support addLiquidity /
+            removeLiquidity / swap. Hex string with 0x prefix.
+      required:
+        - address
+        - assetType
+        - intentArgs
+    CKBOutPoint:
+      type: object
+      properties:
+        txHash:
+          type: string
+          description: The transaction hash of the cell created
+        index:
+          type: string
+          description: The index of the transaction outputs which the cell created at
+      required:
+        - txHash
+        - index
+    CKBCellOutput:
+      type: object
+      properties:
+        capacity:
+          type: string
+          description: The cell ckb capacity
+        lock:
+          description: The lock script of the cell
+          allOf:
+            - $ref: '#/components/schemas/CKBScript'
+        type:
+          description: The type script of the cell
+          allOf:
+            - $ref: '#/components/schemas/CKBScript'
+      required:
+        - capacity
+        - lock
+    CKBIndexerCell:
+      type: object
+      properties:
+        blockNumber:
+          type: string
+          description: The block number cell created
+        outPoint:
+          description: The ckb cell outpoint
+          allOf:
+            - $ref: '#/components/schemas/CKBOutPoint'
+        output:
+          description: The ckb cell info
+          allOf:
+            - $ref: '#/components/schemas/CKBCellOutput'
+        outputData:
+          type: string
+          description: The ckb cell data, hex string started with '0x' prefix
+        txIndex:
+          type: string
+          description: The index of the transaction cell created in block
+      required:
+        - outPoint
+        - output
+        - outputData
+    CkbCellOutputDto:
+      type: object
+      properties:
+        ckbInputCell:
+          description: The cell information of the paymaster's ckb cell
+          allOf:
+            - $ref: '#/components/schemas/CKBIndexerCell'
+        paymasterIntentUDTCellForSwap:
+          description: >-
+            The output cell paymaster required in the intent transaction outputs
+            for return ckb back
+          allOf:
+            - $ref: '#/components/schemas/CKBCellOutput'
+        udtAmount:
+          type: string
+          description: >-
+            The udt amount used to buy paymaster's ckb cell, unit: shannon. Hex
+            string start with '0x'
+      required:
+        - ckbInputCell
+        - paymasterIntentUDTCellForSwap
+        - udtAmount
+    "SwaggerBaseApiResponseFor class CkbCellOutputDto {\n} ":
+      type: object
+      properties:
+        code:
+          type: number
+          description: >-
+            200:success;4000:parameter exception 4001:Item invalid;4002:Service
+            fee not match;4003:Psbt not match;4004:Ckb tx not
+            match;4005:Signature error,4006:Item is existing
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/CkbCellOutputDto'
+      required:
+        - code
+        - message
+        - data
+    CKBCellDep:
+      type: object
+      properties:
+        outPoint:
+          type: string
+          description: cell dep's outpoint
+        depType:
+          type: string
+          description: cell dep's type
+      required:
+        - outPoint
+        - depType
+    CKBCellInput:
+      type: object
+      properties:
+        previousOutput:
+          description: cell outpoint
+          allOf:
+            - $ref: '#/components/schemas/CKBOutPoint'
+        since:
+          type: string
+          description: cell input since
+      required:
+        - previousOutput
+        - since
+    CKBRawTransactionToSign:
+      type: object
+      properties:
+        witnesses:
+          description: transaction witness args
+          type: array
+          items:
+            type: string
+        version:
+          type: string
+          description: transaction version
+        cellDeps:
+          description: transaction cell deps
+          type: array
+          items:
+            $ref: '#/components/schemas/CKBCellDep'
+        headerDeps:
+          description: transaction header deps
+          type: array
+          items:
+            type: string
+        inputs:
+          description: transaction inputs
+          type: array
+          items:
+            $ref: '#/components/schemas/CKBCellInput'
+        outputs:
+          description: transaction outputs
+          type: array
+          items:
+            $ref: '#/components/schemas/CKBCellOutput'
+        outputsData:
+          description: transaction outputs' data
+          type: array
+          items:
+            type: string
+      required:
+        - witnesses
+        - version
+        - cellDeps
+        - headerDeps
+        - inputs
+        - outputs
+        - outputsData
+    PaymasterSigInputDto:
+      type: object
+      properties:
+        address:
+          type: string
+          description: user's ckb address
+        transaction:
+          description: user's intent transaction with user's signature in witness
+          allOf:
+            - $ref: '#/components/schemas/CKBRawTransactionToSign'
+      required:
+        - address
+        - transaction
+    PaymasterSigOutputDto:
+      type: object
+      properties:
+        signedTransaction:
+          description: transaction signed by user and paymaster
+          allOf:
+            - $ref: '#/components/schemas/CKBRawTransactionToSign'
+        sig:
+          type: string
+          description: paymaster's signature
+      required:
+        - signedTransaction
+        - sig
+    "SwaggerBaseApiResponseFor class PaymasterSigOutputDto {\n} ":
+      type: object
+      properties:
+        code:
+          type: number
+          description: >-
+            200:success;4000:parameter exception 4001:Item invalid;4002:Service
+            fee not match;4003:Psbt not match;4004:Ckb tx not
+            match;4005:Signature error,4006:Item is existing
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/PaymasterSigOutputDto'
+      required:
+        - code
+        - message
+        - data

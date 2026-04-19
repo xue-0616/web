@@ -1,0 +1,75 @@
+[workspace]
+members = [
+    "crates/api",
+    "crates/configs",
+    "crates/contracts-abi",
+    "crates/validator",
+    "crates/validator-daos",
+    "crates/validator-handler",
+    "crates/validator-log",
+    "crates/validator-monitor",
+    "crates/validator-mq",
+    "crates/validator-scheduler",
+    "crates/validator-signer",
+    "crates/validator-submitter",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
+actix-web = "4"
+actix-cors = "0.7"
+actix-governor = "0.5"
+sea-orm = { version = "0.12.15", features = ["sqlx-mysql", "runtime-tokio-rustls", "macros"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+anyhow = "1"
+thiserror = "1"
+hex = "0.4"
+reqwest = { version = "0.11", features = ["json"] }
+ethers = { version = "2", features = ["legacy", "ws"] }
+ethers-contract = "2"
+redis = { version = "0.27", features = ["tokio-comp", "streams"] }
+deadpool-redis = "0.18"
+k256 = { version = "0.13", features = ["ecdsa"] }
+sha3 = "0.10"
+subtle = "2"
+hmac = "0.12"
+sha2 = "0.10"
+
+[package]
+name = "unipass-bridge-validator"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+actix-web.workspace = true
+actix-cors.workspace = true
+actix-governor.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+sea-orm.workspace = true
+deadpool-redis = "0.18"
+redis = { version = "0.27", features = ["tokio-comp", "streams"] }
+subtle.workspace = true
+hex.workspace = true
+envy = "0.4"
+
+api = { path = "crates/api" }
+configs = { path = "crates/configs" }
+validator = { path = "crates/validator" }
+validator-monitor = { path = "crates/validator-monitor" }
+validator-scheduler = { path = "crates/validator-scheduler" }
+validator-signer = { path = "crates/validator-signer" }

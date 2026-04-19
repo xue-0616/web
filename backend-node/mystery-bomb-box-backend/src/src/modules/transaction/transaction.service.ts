@@ -1,0 +1,254 @@
+import { BadRequestException, Injectable, OnModuleInit } from '@nestjs/common';
+import { TransactionEntity, TransactionStatus, TransactionType } from '../../database/entities/transaction.entity';
+import { DbService } from '../db/db.service';
+import { MysteryBoxDbService } from '../db/mystery-boxs.service';
+import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
+import { AppConfigService } from '../../common/utils-service/app.config.services';
+import { AppLoggerService } from '../../common/utils-service/logger.service';
+import { GrabMysteryBoxDbService } from '../db/grab-mystery-boxs.service';
+import { TransactionDbService } from '../db/transaction-db.service';
+import { ActionInputDto, ActionParamInputDto } from './dto/action.input.dto';
+import { ActionOutputDto } from './dto/action.output.dto';
+import { GarbActionParamInputDto } from './dto/grab.action.input.dto';
+import { Mutex } from 'async-mutex';
+import { In } from 'typeorm';
+import { decode, encode } from 'bs58';
+import { sleep } from '../../common/utils/tools';
+import { createMysteryBoxTransaction, grabMysteryBoxInstruction } from '../../common/utils/transaction';
+import { createPostResponse } from '@solana/actions';
+import { MysteryBoxStatus } from '../../database/entities/mystery-boxs.entity';
+import { StatusName } from '../../common/utils/error.code';
+
+@Injectable()
+export class TransactionService implements OnModuleInit {
+    constructor(private readonly logger: AppLoggerService, private readonly appConfig: AppConfigService, private readonly dbService: DbService, private readonly mysteryBoxDbService: MysteryBoxDbService, private readonly grabMysteryBoxDbService: GrabMysteryBoxDbService, private readonly transactionDbService: TransactionDbService) {
+        this.transactions = [];
+        this.latestSuccessSignature = null;
+        this.mutex = new Mutex();
+        this.solanaClient = new Connection(appConfig.solanaRpcUrl);
+        this.logger.setContext(TransactionService.name);
+        this.submitter = Keypair.fromSecretKey(Buffer.from(this.appConfig.submitterSecretKey, 'base64'));
+    }
+    transactions: TransactionEntity[];
+    latestSuccessSignature: string | null;
+    private mutex: any;
+    private submitter: any;
+    solanaClient: Connection;
+    async onModuleInit(): Promise<void> {
+            await this.init();
+        }
+    async init(): Promise<void> {
+            const [transactions, latestSuccessTransaction] = await Promise.all([
+                this.transactionDbService.find({
+                    status: In([TransactionStatus.Pending, TransactionStatus.SentToChain]),
+                }),
+                this.transactionDbService.find({
+                    status: TransactionStatus.Success,
+                }, {
+                    slot: 'DESC',
+                    slotIndex: 'DESC',
+                }, 1),
+            ]);
+            const release = await this.mutex.acquire();
+            try {
+                this.transactions = transactions;
+                if (this.latestSuccessSignature === null) {
+                    this.latestSuccessSignature = latestSuccessTransaction[0]
+                        ? encode(new Uint8Array(latestSuccessTransaction[0].txSig ?? []))
+                        : null;
+                }
+            }
+            finally {
+                release();
+            }
+            this.watchTransactions();
+        }
+    async addTransaction(transaction: TransactionEntity): Promise<void> {
+            const release = await this.mutex.acquire();
+            try {
+                this.transactions.push(transaction);
+            }
+            finally {
+                release();
+            }
+        }
+    async watchTransactions(): Promise<void> {
+            while (true) {
+                try {
+                    const blockHeight = await this.solanaClient.getBlockHeight('confirmed');
+                    const signatures = await this.solanaClient.getSignaturesForAddress(this.submitter.publicKey, {
+                        limit: 1000,
+                        until: this.latestSuccessSignature ?? undefined,
+                    }, 'confirmed');
+                    if (signatures.length > 0) {
+                        const transactions = await this.solanaClient.getTransactions(signatures.map((signature) => signature.signature), {
+                            maxSupportedTransactionVersion: 0,
+                            commitment: 'confirmed',
+                        });
+                        for (const transaction of transactions.reverse()) {
+                            if (!transaction || !transaction.meta) {
+                                continue;
+                            }
+                            if (transaction.meta.err) {
+                                continue;
+                            }
+                            let logInfo: { type: 'create' | 'grab'; boxId: any; grabId?: any } | null = null;
+                            (transaction.meta.logMessages ?? []).find((log) => {
+                                const createBoxInfo = extractCreateBoxInfo(log);
+                                if (createBoxInfo) {
+                                    logInfo = { type: 'create', ...createBoxInfo };
+                                    return true;
+                                }
+                                const grabBoxInfo = extractGrabBoxInfo(log);
+                                if (grabBoxInfo) {
+                                    logInfo = { type: 'grab', ...grabBoxInfo };
+                                    return true;
+                                }
+                                return false;
+                            });
+                            if (logInfo) {
+                                const info: { type: 'create' | 'grab'; boxId: any; grabId?: any } = logInfo;
+                                const slot = await this.solanaClient.getBlock(transaction.slot, {
+                                    commitment: 'confirmed',
+                                    maxSupportedTransactionVersion: 0,
+                                });
+                                if (!slot) {
+                                    continue;
+                                }
+                                switch (info.type) {
+                                    case 'create': {
+                                        await this.dbService.successCreateMysteryBox(info.boxId, BigInt(transaction.slot), slot, Buffer.from(decode(transaction.transaction.signatures[0])));
+                                        break;
+                                    }
+                                    case 'grab':
+                                        await this.dbService.successGrabMysteryBox(info.boxId, info.grabId, BigInt(transaction.slot), slot, Buffer.from(decode(transaction.transaction.signatures[0])));
+                                        break;
+                                }
+                            }
+                        }
+                        const release = await this.mutex.acquire();
+                        try {
+                            this.latestSuccessSignature = signatures[0].signature;
+                        }
+                        finally {
+                            release();
+                        }
+                    }
+                    const timeoutTxs = this.transactions.filter((tx) => tx.txBlockHeight + 200n < blockHeight);
+                    for (const tx of timeoutTxs) {
+                        switch (tx.txOrderType) {
+                            case TransactionType.CreateMysteryBox: {
+                                await this.dbService.failCreateMysteryBox(tx.txOrderId, 'timeout', null);
+                                break;
+                            }
+                            case TransactionType.GrabMysteryBox: {
+                                await this.dbService.failGrabMysteryBox(tx.txOrderId, 'timeout', null);
+                                break;
+                            }
+                        }
+                        const release = await this.mutex.acquire();
+                        try {
+                            this.transactions = this.transactions.filter((t) => t.id !== tx.id);
+                        }
+                        finally {
+                            release();
+                        }
+                    }
+                    await sleep(1000);
+                }
+                catch (error) {
+                    this.logger.error(String(error));
+                    await sleep(300000);
+                }
+            }
+        }
+    async createMysteryBoxTransaction(param: ActionParamInputDto, input: ActionInputDto): Promise<ActionOutputDto> {
+            const { bombNumber, amount } = param;
+            const { account } = input;
+            const publicKey = new PublicKey(account);
+            const bigIntAmount = BigInt(amount * LAMPORTS_PER_SOL);
+            const mysteryBox = await this.mysteryBoxDbService.insert(publicKey, bigIntAmount, bombNumber, BigInt(this.appConfig.actionInfo.totalBoxCount));
+            if (!mysteryBox) {
+                throw new BadRequestException(StatusName.ParameterException);
+            }
+            const tx = await createMysteryBoxTransaction(publicKey, mysteryBox.id, bigIntAmount, bombNumber, this.submitter, this.solanaClient);
+            const { tx: txEntity } = await this.dbService.generateMysteryBox(mysteryBox, tx);
+            await this.addTransaction(txEntity);
+            const resp = (await createPostResponse({
+                fields: {
+                    type: 'transaction',
+                    transaction: tx.tx,
+                } as any,
+            })) as any;
+            const { transaction } = resp;
+            return { transaction };
+        }
+    async grabMysteryBoxsTransaction(param: GarbActionParamInputDto, input: ActionInputDto): Promise<ActionOutputDto> {
+            const { id } = param;
+            const { account } = input;
+            const publicKey = new PublicKey(account);
+            const mysteryBox = await this.mysteryBoxDbService.findOne({
+                id: BigInt(id),
+                status: MysteryBoxStatus.GRABBING,
+            });
+            if (!mysteryBox) {
+                this.logger.warn(`[grabMysteryBoxsTransaction] ${id} not match`);
+                throw new BadRequestException(StatusName.ParameterException);
+            }
+            // Capacity guard: refuse to mint more grab txs than the box allows.
+            // Without this check concurrent grabbers can each pass the
+            // status=GRABBING check and overcommit the payout pool.
+            const openCount = BigInt((mysteryBox as any).openCount ?? 0);
+            const openLimit = BigInt((mysteryBox as any).openLimit ?? 0);
+            if (openLimit > 0n && openCount >= openLimit) {
+                this.logger.warn(
+                    `[grabMysteryBoxsTransaction] box ${id} already full: ${openCount}/${openLimit}`,
+                );
+                throw new BadRequestException(StatusName.ParameterException);
+            }
+            const grabAmount = (BigInt(mysteryBox.amount) * BigInt(18)) / BigInt(10);
+            const garbMysteryBox = await this.grabMysteryBoxDbService.insert(mysteryBox.id, publicKey, grabAmount);
+            if (!garbMysteryBox) {
+                throw new BadRequestException(StatusName.ParameterException);
+            }
+            const tx = await grabMysteryBoxInstruction(mysteryBox.id, garbMysteryBox.id, publicKey, grabAmount, this.submitter, this.solanaClient);
+            const { tx: txEntity } = await this.dbService.generateGrabMysteryBox(tx, garbMysteryBox);
+            await this.addTransaction(txEntity);
+            const resp = (await createPostResponse({
+                fields: {
+                    type: 'transaction',
+                    transaction: tx.tx,
+                } as any,
+            })) as any;
+            const { transaction } = resp;
+            return { transaction };
+        }
+}
+
+export function extractCreateBoxInfo(input: string): any | null {
+    const regex = /Program log: Memo \(len (\d+)\): \"(\d+): Create (\d+(?:\.\d{1,3})?) SOL box with bomb number ([0-9]) in bombfun\.com\"/;
+    const match = input.match(regex);
+    if (match) {
+        return {
+            type: 'create',
+            boxId: BigInt(match[2]),
+            boxAmount: parseFloat(match[3]),
+            bombNumber: parseInt(match[4], 10),
+        };
+    }
+    return null;
+}
+
+export function extractGrabBoxInfo(input: string): any | null {
+    const regex = /Program log: Memo \(len (\d+)\): \"(\d+)-(\d+): \[([1-9A-HJ-NP-Za-km-z]{32,44})\] Open in bombfun\.com\"/;
+    const match = input.match(regex);
+    if (match) {
+        return {
+            type: 'grab',
+            boxId: BigInt(match[2]),
+            grabId: BigInt(match[3]),
+            account: match[4],
+        };
+    }
+    return null;
+}

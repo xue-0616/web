@@ -1,0 +1,24 @@
+[package]
+name = "utils"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+sea-orm.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+solana-sdk.workspace = true
+solana-client.workspace = true
+base64.workspace = true
+bincode.workspace = true
+chrono.workspace = true
+zeroize = "1"
+tonic = "0.12"
+prost = "0.13"
+prost-types = "0.13"
+api-common = { path = "../api-common" }
+entity_crate = { package = "entity", path = "../entity" }
+tx-builder = { path = "../tx-builder" }

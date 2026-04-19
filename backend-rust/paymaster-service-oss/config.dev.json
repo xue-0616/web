@@ -1,0 +1,18 @@
+{
+  "_comment": "Dev-mode paymaster config. Overwrite signer_private_key before leaving dev.",
+  "bind": "0.0.0.0",
+  "port": 8080,
+  "signer_private_key": "0x0101010101010101010101010101010101010101010101010101010101010101",
+  "chains": {
+    "1": {
+      "entry_point": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+      "rpc_url": "https://eth.llamarpc.com"
+    },
+    "11155111": {
+      "entry_point": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+      "rpc_url": "https://rpc.sepolia.org"
+    }
+  },
+  "sender_whitelist": [],
+  "log_json": false
+}

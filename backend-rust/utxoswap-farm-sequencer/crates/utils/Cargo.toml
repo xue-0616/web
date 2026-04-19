@@ -1,0 +1,23 @@
+[package]
+name = "utils"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+sea-orm.workspace = true
+deadpool-redis.workspace = true
+redis.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+tokio.workspace = true
+hex.workspace = true
+uuid = { version = "1", features = ["v4"] }
+
+api-common = { path = "../api-common" }
+entity_crate = { package = "entity", path = "../entity" }
+types = { path = "../types" }
+intent-solver = { path = "../intent-solver" }

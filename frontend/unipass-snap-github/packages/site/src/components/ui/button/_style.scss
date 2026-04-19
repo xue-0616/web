@@ -1,0 +1,115 @@
+.up_button {
+	position: relative;
+	white-space: nowrap;
+	text-align: center;
+	vertical-align: middle;
+	cursor: pointer;
+	overflow: hidden;
+	box-sizing: border-box;
+	border: 0;
+	outline: none;
+	font-weight: $btn-font-weight;
+
+	&:active,
+	&.active {
+		opacity: $btn-opacity-focus;
+	}
+
+	.up_button_content {
+		display: flex;
+		flex-flow: row nowrap;
+		justify-content: center;
+		align-items: center;
+
+		span {
+			display: inline-block;
+		}
+
+		.up_button_loading {
+			animation: spin 1s infinite linear;
+			width: 20px;
+			height: 20px;
+		}
+
+		.up_button_divider {
+			width: 8px;
+		}
+	}
+
+	.up_button_mask {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background-color: rgba(0, 0, 0, 0);
+
+		&:hover {
+			background-color: rgba(0, 0, 0, 0.15);
+		}
+	}
+
+	&.up_button_sm {
+		padding: $btn-padding-sm;
+		border-radius: 100px;
+		height: 36px;
+		font-size: 12px;
+	}
+
+	&.up_button_md {
+		padding: $btn-padding-md;
+		border-radius: 128px;
+		height: 44px;
+		font-size: 14px;
+	}
+
+	&.up_button_lg {
+		padding: $btn-padding-lg;
+		border-radius: 148px;
+		height: 48px;
+		font-size: 14px;
+	}
+
+	&.up_button_filled {
+		color: $btn-filled-text-color;
+		background: $secondary-gradient-button;
+	}
+
+	&.up_button_gray {
+		color: var(--up-text-secondary);
+		background-color: #F7F7FA;
+		border: 1px solid var(--up-border-line);
+
+		&:hover {
+			background-color: #E9E9F3;
+		}
+	}
+
+	&.up_button_tinted {
+		color: var(--up-primary);
+		border: 1px solid transparent;
+		background-color: var(--up-button-tinted-content);
+
+		&:hover {
+			border: 1px solid #8864FF;
+			background-color: #E7E0FF;
+		}
+	}
+
+	&.disabled,
+	&[disabled] {
+		cursor: not-allowed;
+		opacity: $btn-opacity-disable !important;
+		box-shadow: none;
+
+		>* {
+			pointer-events: none;
+		}
+	}
+}
+
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}

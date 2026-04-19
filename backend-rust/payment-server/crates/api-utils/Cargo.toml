@@ -1,0 +1,29 @@
+[package]
+name = "api-utils"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+actix-web.workspace = true
+sea-orm.workspace = true
+deadpool-redis.workspace = true
+redis.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+ethers.workspace = true
+hex.workspace = true
+hmac.workspace = true
+sha2.workspace = true
+reqwest.workspace = true
+chrono.workspace = true
+base64.workspace = true
+uuid.workspace = true
+tokio.workspace = true
+jsonwebtoken = "9"
+rust_decimal = "1"
+common = { path = "../common" }
+config = { path = "../config" }
+daos = { path = "../daos" }
+payment-contracts = { path = "../payment-contracts" }

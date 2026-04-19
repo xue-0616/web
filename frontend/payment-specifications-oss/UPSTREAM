@@ -1,0 +1,4 @@
+upstream: UniPass-Wallet-Docs
+local: ../../upstream/UniPass-Wallet-Docs
+subpath: docs/wallet/
+builder: docusaurus-v2

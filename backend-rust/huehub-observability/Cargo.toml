@@ -1,0 +1,54 @@
+[package]
+name        = "huehub-observability"
+version     = "0.1.0"
+edition     = "2021"
+description = "Shared observability stack (structured logs, Prometheus metrics, OpenTelemetry traces, /healthz + /readyz) for the huehub/unipass Rust fleet."
+license     = "MIT OR Apache-2.0"
+
+[dependencies]
+actix-web           = "4"
+serde               = { version = "1", features = ["derive"] }
+serde_json          = "1"
+tracing             = "0.1"
+tracing-subscriber  = { version = "0.3", features = ["env-filter", "json", "fmt"] }
+
+# Metrics — `metrics` is the façade our Rust code already uses via
+# `metrics::counter!`/`metrics::histogram!`; `metrics-exporter-prometheus`
+# turns those calls into a `/metrics` endpoint.
+metrics                      = "0.22"
+metrics-exporter-prometheus  = { version = "0.13", default-features = false }
+
+# OpenTelemetry (off by default to keep the crate lean; opt-in via the
+# `otel` feature when the service deploys into an OTLP-capable mesh).
+[dependencies.opentelemetry]
+version  = "0.22"
+optional = true
+features = ["trace"]
+
+[dependencies.opentelemetry_sdk]
+version  = "0.22"
+optional = true
+features = ["rt-tokio"]
+
+[dependencies.opentelemetry-otlp]
+version  = "0.15"
+optional = true
+default-features = false
+features = ["grpc-tonic", "trace"]
+
+[dependencies.tracing-opentelemetry]
+version  = "0.23"
+optional = true
+
+[features]
+default = []
+otel    = [
+  "dep:opentelemetry",
+  "dep:opentelemetry_sdk",
+  "dep:opentelemetry-otlp",
+  "dep:tracing-opentelemetry",
+]
+
+[dev-dependencies]
+actix-rt   = "2"
+tokio      = { version = "1", features = ["macros", "rt-multi-thread"] }

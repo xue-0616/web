@@ -1,0 +1,11 @@
+target/
+_archived/
+.git/
+.github/
+**/*.log
+**/.DS_Store
+**/node_modules/
+# Local dev state never goes into the image
+data/
+*.redb
+.env

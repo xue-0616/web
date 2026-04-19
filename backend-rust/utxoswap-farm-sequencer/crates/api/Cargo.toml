@@ -1,0 +1,22 @@
+[package]
+name = "api"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+actix-web.workspace = true
+sea-orm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+hex.workspace = true
+reqwest.workspace = true
+rust_decimal.workspace = true
+k256.workspace = true
+sha2.workspace = true
+
+api-common = { path = "../api-common" }
+entity_crate = { package = "entity", path = "../entity" }
+types = { path = "../types" }

@@ -1,0 +1,35 @@
+/**
+ * Page-level styles on top of tokens.css + brand.css. Referenced from
+ * layout.tsx to stay scoped to the entire app (global selectors).
+ */
+.page {
+  max-width: 1100px; margin: 0 auto;
+  padding: var(--space-12) var(--space-8);
+  display: flex; flex-direction: column; gap: var(--space-10);
+}
+.page-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: var(--space-6); flex-wrap: wrap;
+}
+.logo {
+  font-size: 32px; font-weight: 800;
+  color: var(--accent); margin-bottom: var(--space-2);
+  filter: drop-shadow(0 0 16px var(--accent-ghost));
+}
+.page-head h1 {
+  margin: 0 0 var(--space-2); font-size: var(--text-3xl);
+  letter-spacing: -0.02em;
+}
+.page-head p {
+  margin: 0; color: var(--fg-dim); max-width: 60ch;
+}
+.pill {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border-bright); border-radius: var(--radius-full);
+  color: var(--fg-dim); font-size: var(--text-sm); font-weight: 500;
+}
+.pill:hover { color: var(--fg); border-color: var(--accent); }
+.grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-6);
+}
+@media (max-width: 880px) { .grid { grid-template-columns: 1fr; } }

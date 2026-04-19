@@ -1,0 +1,30 @@
+{
+  "version": "0.1.0-alpha.4",
+  "description": "@unipasswallet/smart-wallet-snap: Metamask snap for UniPass Wallet",
+  "proposedName": "@unipasswallet/smart-wallet-snap",
+  "source": {
+    "shasum": "d3kmlHwzIuU4gWvDBk5x0ZqqyouAdizzpyfNL6YN4Zc=",
+    "location": {
+      "npm": {
+        "filePath": "dist/bundle.js",
+        "packageName": "@unipasswallet/smart-wallet-snap",
+        "registry": "https://registry.npmjs.org"
+      }
+    }
+  },
+  "initialPermissions": {
+    "endowment:network-access": {},
+    "endowment:rpc": {
+      "dapps": true,
+      "snaps": false
+    },
+    "snap_dialog": {},
+    "snap_manageState": {},
+    "snap_getBip44Entropy": [
+      {
+        "coinType": 60
+      }
+    ]
+  },
+  "manifestVersion": "0.1"
+}

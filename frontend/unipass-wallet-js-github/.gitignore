@@ -1,0 +1,15 @@
+node_modules
+**/dist
+results
+.nyc_output
+*.tsbuildinfo
+artifacts
+cache
+.env
+config.ts
+.npmrc
+.pnpm-store
+.secret
+*.DS_Store
+.vscode
+examples/UniPass-Wallet-Frontend

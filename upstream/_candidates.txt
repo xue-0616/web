@@ -1,0 +1,35 @@
+# format: <local_name>|<candidate_git_url>
+# === backend-bin (12) ===
+apple-id-public-key|https://github.com/UniPassID/UniPass-OpenID-Auth.git
+asset-migrator|https://github.com/utxostack/utxo-allocator.git
+denver-airdrop-rs|
+dexauto-data-center|
+dkim-and-open-id-monitor|https://github.com/UniPassID/UniPass-OpenID-Auth.git
+huehub-rgbpp-indexer|https://github.com/utxostack/rgbpp.git
+paymaster-service|https://github.com/UniPassID/account-abstraction.git
+stackup-bundler|https://github.com/UniPassID/stackup-bundler.git
+trading-tracker|
+unipass-snap-service|https://github.com/UniPassID/UniPass-Snap.git
+unipass-wallet-tss|https://github.com/UniPassID/UniPass-Tss-Lib.git
+unipass-wallet-zk-server|https://github.com/UniPassID/UniPass-email-circuits.git
+# === frontend (with -src residuals) ===
+auto-dex-site|
+blinks-miniapp|
+bomb-fun-site|
+hongkong-wanxiang-festival|
+huehub-dex-site|
+payment-specifications|https://github.com/UniPassID/UniPass-Wallet-Docs.git
+payment-swagger|https://github.com/UniPassID/UniPass-Wallet-Docs.git
+solagram-wallet|
+solagram-web-site|
+solana-wallet-mini-app-demo|https://github.com/UniPassID/smart-account-vite-demo.git
+unipass-app-h5|https://github.com/UniPassID/unipass-frontend-test.git
+unipass-auth0-verify-code|
+unipass-cms-frontend|
+unipass-payment-web|
+unipass-snap-frontend|https://github.com/UniPassID/UniPass-Snap.git
+unipass-snap-react|https://github.com/UniPassID/UniPass-Wallet-Snap.git
+unipass-wallet-frontend|
+unipass-wallet-js|https://github.com/UniPassID/UniPass-Wallet-JS.git
+unipass-wallet-official-website|
+utxo-swap-site|https://github.com/utxostack/utxo-stack-sdk.git

@@ -1,0 +1,63 @@
+# trading-tracker-oss sample configuration
+#
+# Copy to `config.toml` and edit, or set `TRADING_TRACKER_CONFIG=/path/to/this.toml`
+# when launching. Environment variables override nothing (TOML is read
+# exclusively when a path is provided); use one or the other.
+
+# ────────────────────────────────────────────────────────────────────────────
+# [node] — Substreams connection
+# ────────────────────────────────────────────────────────────────────────────
+[node]
+# StreamingFast (paid, reliable) or Pinax/self-hosted alternatives.
+endpoint = "https://mainnet.sol.streamingfast.io:443"
+# Leave `api_key` unset for self-hosted Firehose/substreams without auth.
+# api_key = "sf_xxx…"
+# Path to the substreams `.spkg` package (local path or https:// URL).
+# Recommended: TopLedger's `solana-dex-trades-extended-v0.3.4.spkg`.
+package = "./substreams/solana-dex-trades-extended-v0.3.4.spkg"
+# Output module name defined inside the `.spkg`.
+module  = "map_dex_trades"
+
+# ────────────────────────────────────────────────────────────────────────────
+# Runtime
+# ────────────────────────────────────────────────────────────────────────────
+solana_rpc  = "https://api.mainnet-beta.solana.com"
+# Slot to start consuming from on first boot. Once a cursor is persisted
+# this is ignored (stream resumes from cursor). Use a recent slot to save
+# sync time — the track'd pools only need "price going forward".
+start_block = 300000000
+db_path     = "./data/cursor.redb"
+log_format  = "pretty"            # or "json" for production
+
+# ────────────────────────────────────────────────────────────────────────────
+# [rpc] — JSON-RPC server (jsonrpsee) bind settings
+# ────────────────────────────────────────────────────────────────────────────
+[rpc]
+listen_addr     = "0.0.0.0:8080"
+max_connections = 1024
+
+# ────────────────────────────────────────────────────────────────────────────
+# [[pools]] — Initial pools to track (can be added at runtime via RPC too)
+# ────────────────────────────────────────────────────────────────────────────
+
+# Raydium AMM v4: SOL/USDC
+[[pools]]
+kind    = "raydium_amm"
+address = "58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2"
+mint_a  = "So11111111111111111111111111111111111111112"
+mint_b  = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+
+# Raydium CLMM: JUP/USDC
+[[pools]]
+kind    = "raydium_clmm"
+address = "DRaExvJ7eSmmw5MdkQPvggmhKyFxVz5JntnTCWZ7Zuqc"
+mint_a  = "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN"
+mint_b  = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+
+# Pump.fun bonding curve — `bonding_curve` is the PDA holding the SOL reserves.
+# [[pools]]
+# kind           = "pump"
+# address        = "<pump-fun-pool-pda>"
+# mint_a         = "<memecoin-mint>"
+# mint_b         = "So11111111111111111111111111111111111111112"
+# bonding_curve  = "<bonding-curve-pda>"

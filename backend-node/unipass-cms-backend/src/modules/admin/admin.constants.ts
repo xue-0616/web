@@ -1,0 +1,13 @@
+export const ADMIN_USER = 'adminUser';
+export const AUTHORIZE_KEY_METADATA = 'admin_module:authorize';
+export const PERMISSION_OPTIONAL_KEY_METADATA = 'admin_module:permission_optional';
+export const LOG_DISABLED_KEY_METADATA = 'admin_module:log_disabled';
+export const ROOT_ROLE_ID = 'admin_module:root_role_id';
+export const SYS_TASK_QUEUE_NAME = 'admin_module:sys-task';
+export const SYS_TASK_QUEUE_PREFIX = 'admin:sys:task';
+export const FORBIDDEN_OP_MENU_ID_INDEX = 3;
+export const ADMIN_PREFIX = 'admin';
+export const NETDISK_DELIMITER = '/';
+export const NETDISK_LIMIT = 100;
+export const NETDISK_HANDLE_MAX_ITEM = 50;
+export const NETDISK_COPY_SUFFIX = '的副本';

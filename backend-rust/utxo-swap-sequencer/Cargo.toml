@@ -1,0 +1,108 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/api",
+    "crates/api-common",
+    "crates/entity",
+    "crates/intent-solver",
+    "crates/migration",
+    "crates/types",
+    "crates/utils",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
+# Web framework
+actix-web = "4"
+actix-cors = "0.7"
+actix-rt = "2"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_with = "3"
+
+# Database (SeaORM + MySQL)
+sea-orm = { version = "0.12", features = ["sqlx-mysql", "runtime-tokio-rustls", "macros", "with-chrono", "with-json"] }
+sea-orm-migration = { version = "0.12", features = ["sqlx-mysql", "runtime-tokio-rustls"] }
+sqlx = { version = "0.7", features = ["mysql", "runtime-tokio-rustls", "chrono"] }
+
+# Redis
+deadpool-redis = "0.18"
+redis = { version = "0.27", features = ["tokio-comp"] }
+
+# HTTP client
+reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
+reqwest-middleware = "0.2"
+reqwest-retry = "0.3"
+reqwest-tracing = "0.4"
+
+# Auth
+jsonwebtoken = "9"
+rsa = "0.9"
+
+# CKB
+ckb-jsonrpc-types = "0.116"
+ckb-types = "0.116"
+ckb-fixed-hash = "0.116"
+molecule = "0.7"
+blake2b-rs = "0.2"
+
+# Crypto
+tiny-keccak = { version = "2", features = ["keccak"] }
+hex = "0.4"
+
+# Async
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-actix-web = "0.7"
+
+# Utils
+anyhow = "1"
+thiserror = "1"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+dotenvy = "0.15"
+num-bigint = "0.4"
+rust_decimal = { version = "1", features = ["serde-with-str"] }
+bigdecimal = { version = "0.4", features = ["serde"] }
+itertools = "0.12"
+sqids = "0.4"
+indexmap = { version = "2", features = ["serde"] }
+
+# OpenAPI
+utoipa = { version = "4", features = ["actix_extras", "chrono"] }
+utoipa-redoc = { version = "3", features = ["actix-web"] }
+
+[package]
+name = "utxo-swap-sequencer"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+actix-web.workspace = true
+actix-cors.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-actix-web.workspace = true
+dotenvy.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sea-orm.workspace = true
+anyhow.workspace = true
+deadpool-redis.workspace = true
+envy = "0.4"
+
+api = { path = "crates/api" }
+api-common = { path = "crates/api-common" }
+entity = { path = "crates/entity" }
+migration = { path = "crates/migration" }
+utils = { path = "crates/utils" }

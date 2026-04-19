@@ -1,0 +1,6 @@
+/* Per-product accent override for huehub-dex-site-oss. Import AFTER tokens.css. */
+:root {
+  --accent:        #3b82f6;
+  --accent-hover:  #60a5fa;
+  --accent-ghost:  #3b82f622;
+}

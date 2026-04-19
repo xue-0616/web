@@ -1,0 +1,18 @@
+[package]
+name = "tx-builder"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+solana-sdk.workspace = true
+solana-client.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+base64.workspace = true
+bs58.workspace = true
+tokio.workspace = true
+cpis = { path = "../cpis" }
+api-common = { path = "../api-common" }

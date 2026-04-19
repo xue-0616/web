@@ -1,0 +1,3 @@
+[workspace]
+members = ['rgbpp-daos', 'rgbpp-indexer']
+resolver = "2"

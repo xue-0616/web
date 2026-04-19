@@ -1,0 +1,239 @@
+openapi: 3.0.0
+paths:
+  /opentg/health:
+    get:
+      operationId: HealthCheckerController_check
+      parameters: []
+      responses:
+        '200':
+          description: The Health Check is successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  info:
+                    type: object
+                    example: &ref_0
+                      database: &ref_1
+                        status: up
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+                    nullable: true
+                  error:
+                    type: object
+                    example: {}
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+                    nullable: true
+                  details:
+                    type: object
+                    example: *ref_0
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+        '503':
+          description: The Health Check is not successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: error
+                  info:
+                    type: object
+                    example: *ref_0
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+                    nullable: true
+                  error:
+                    type: object
+                    example:
+                      redis: &ref_2
+                        status: down
+                        message: Could not connect
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+                    nullable: true
+                  details:
+                    type: object
+                    example:
+                      database: *ref_1
+                      redis: *ref_2
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+  /opentg/api/v1/user/points:
+    post:
+      operationId: TgUserController_showPoints
+      summary: show points
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PointsInputDto'
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/SwaggerBaseApiResponseFor class
+                  PointsOutputDto {
+
+                  } 
+      tags:
+        - User Module
+  /opentg/api/v1/blink/list:
+    get:
+      operationId: BlinkController_getAllTrustedHost
+      summary: show trusted blink action domain
+      parameters: []
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/SwaggerBaseApiResponseFor class
+                  BlinkListOutput {
+
+                  } 
+      tags:
+        - Blink
+info:
+  title: OpenTG API
+  description: OpenTG API description
+  version: '1.0'
+  contact: {}
+tags: []
+servers: []
+components:
+  schemas:
+    PointsInputDto:
+      type: object
+      properties:
+        id:
+          type: number
+          description: The tg user id
+          example: 1721718354091
+        accessHash:
+          type: string
+          description: The tg user access hash
+          example: '1082763405680097179'
+        firstName:
+          type: string
+          description: The tg user first name
+          example: Zhang
+        lastName:
+          type: string
+          description: The tg user last name
+          example: san
+        username:
+          type: string
+          description: The tg user username
+          example: hhhha
+        inviteCode:
+          type: string
+          description: invite Code
+          example: 1oiwe9x2
+      required:
+        - id
+        - accessHash
+        - firstName
+        - lastName
+    PointsOutputDto:
+      type: object
+      properties:
+        points:
+          type: number
+          description: Current user point
+          example: 0
+        inviteCode:
+          type: string
+          description: invite Code
+          example: 1oiwe9x2
+      required:
+        - points
+        - inviteCode
+    "SwaggerBaseApiResponseFor class PointsOutputDto {\n} ":
+      type: object
+      properties:
+        code:
+          type: number
+          description: 200:success;4000:parameter exception
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/PointsOutputDto'
+      required:
+        - code
+        - message
+        - data
+    BlinkListOutput:
+      type: object
+      properties:
+        list:
+          description: blink action list
+          type: array
+          items:
+            type: string
+      required:
+        - list
+    "SwaggerBaseApiResponseFor class BlinkListOutput {\n} ":
+      type: object
+      properties:
+        code:
+          type: number
+          description: 200:success;4000:parameter exception
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/BlinkListOutput'
+      required:
+        - code
+        - message
+        - data

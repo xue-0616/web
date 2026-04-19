@@ -1,0 +1,1284 @@
+openapi: 3.0.0
+paths:
+  /huehub/nft/health:
+    get:
+      operationId: HealthCheckerController_check
+      parameters: []
+      responses:
+        '200':
+          description: The Health Check is successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  info:
+                    type: object
+                    example: &ref_0
+                      database: &ref_1
+                        status: up
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+                    nullable: true
+                  error:
+                    type: object
+                    example: {}
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+                    nullable: true
+                  details:
+                    type: object
+                    example: *ref_0
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+        '503':
+          description: The Health Check is not successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: error
+                  info:
+                    type: object
+                    example: *ref_0
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+                    nullable: true
+                  error:
+                    type: object
+                    example:
+                      redis: &ref_2
+                        status: down
+                        message: Could not connect
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+                    nullable: true
+                  details:
+                    type: object
+                    example:
+                      database: *ref_1
+                      redis: *ref_2
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+  /huehub/nft/api/v1/user/assets/dobs:
+    post:
+      operationId: UserController_getDobsAssets
+      summary: Dobs Assets
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssetsInputDto'
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/SwaggerBaseApiResponseFor class
+                  AssetsOutputDto {
+
+                  } 
+      tags:
+        - User Module
+  /huehub/nft/api/v1/collections:
+    get:
+      operationId: DobsController_collections
+      summary: Query collections
+      parameters:
+        - name: collectionType
+          required: false
+          in: query
+          description: 'seal type 0:hot 1:all '
+          schema:
+            default: 0
+            enum:
+              - 0
+              - 1
+            type: number
+        - name: page
+          required: false
+          in: query
+          description: page number
+          schema:
+            default: 0
+            type: number
+        - name: limit
+          required: false
+          in: query
+          schema:
+            default: 10
+            type: number
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/SwaggerBaseApiResponseFor class
+                  CollectionOutputDto {
+
+                  } 
+      tags: &ref_3
+        - Dobs Module
+  /huehub/nft/api/v1/collections/info:
+    get:
+      operationId: DobsController_collectionInfo
+      summary: Get collection info
+      parameters:
+        - name: clusterTypeHash
+          required: true
+          in: query
+          description: collection type hash
+          schema:
+            enum: []
+            type: number
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/SwaggerBaseApiResponseFor class
+                  CollectionInfoDto {
+
+                  } 
+      tags: *ref_3
+  /huehub/nft/api/v1/collections/items:
+    get:
+      operationId: DobsController_items
+      summary: Show nft items
+      parameters:
+        - name: clusterTypeHash
+          required: true
+          in: query
+          description: collection type hash
+          schema:
+            type: string
+        - name: sort
+          required: true
+          in: query
+          description: 0:Desc 1:Asc
+          schema:
+            enum:
+              - 0
+              - 1
+            type: number
+        - name: page
+          required: false
+          in: query
+          description: page number
+          schema:
+            default: 0
+            type: number
+        - name: limit
+          required: false
+          in: query
+          schema:
+            default: 10
+            type: number
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/SwaggerBaseApiResponseFor class
+                  ItemListOutputDto {
+
+                  } 
+      tags: *ref_3
+  /huehub/nft/api/v1/collections/item/list:
+    post:
+      operationId: DobsController_listItems
+      summary: List nft
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListItemsInputDto'
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/SwaggerBaseApiResponseFor class
+                  ListItemsOutputDto {
+
+                  } 
+      tags: *ref_3
+  /huehub/nft/api/v1/collections/item/get_psbt:
+    post:
+      operationId: DobsController_getItemPSBT
+      summary: Get psbt
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemPSBTInputDto'
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/SwaggerBaseApiResponseFor class
+                  ItemPSBTOutputDto {
+
+                  } 
+      tags: *ref_3
+  /huehub/nft/api/v1/collections/item/buy:
+    post:
+      operationId: DobsController_buyItems
+      summary: Buy items
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BuyItemsInputDto'
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/SwaggerBaseApiResponseFor class
+                  BuyItemsOutputDto {
+
+                  } 
+      tags: *ref_3
+  /huehub/nft/api/v1/collections/item/unlist:
+    post:
+      operationId: DobsController_unlistItems
+      summary: Unlist items
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnlistItemsInputDto'
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/SwaggerBaseApiResponseFor class
+                  UnlistItemsOutputDto {
+
+                  } 
+      tags: *ref_3
+  /huehub/nft/api/v1/collections/orders:
+    get:
+      operationId: DobsController_queryOrders
+      summary: My nft orders
+      parameters:
+        - name: orderType
+          required: true
+          in: query
+          description: >-
+            query order type enum,0:Listing,1:SoldOut,2:Bought,3:Unlist 4: All
+            Order
+          schema:
+            enum:
+              - 0
+              - 1
+              - 2
+              - 3
+              - 4
+            type: number
+        - name: clusterTypeHash
+          required: false
+          in: query
+          description: collection type hash
+          schema:
+            type: string
+        - name: page
+          required: false
+          in: query
+          description: page number
+          schema:
+            default: 0
+            type: number
+        - name: limit
+          required: false
+          in: query
+          schema:
+            default: 10
+            type: number
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/SwaggerBaseApiResponseFor class
+                  MyOrdersOutput {
+
+                  } 
+      tags: *ref_3
+  /huehub/nft/api/v1/collections/activities:
+    get:
+      operationId: DobsController_getActivities
+      summary: NFT activities
+      parameters:
+        - name: activityType
+          required: true
+          in: query
+          description: 'query order type enum,0:All,1:Sale,2:List,3:Transfer 4: Unlist'
+          schema:
+            enum:
+              - 0
+              - 1
+              - 2
+              - 3
+              - 4
+            type: number
+        - name: clusterTypeHash
+          required: false
+          in: query
+          description: collection type hash
+          schema:
+            type: string
+        - name: page
+          required: false
+          in: query
+          description: page number
+          schema:
+            default: 0
+            type: number
+        - name: limit
+          required: false
+          in: query
+          schema:
+            default: 10
+            type: number
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/SwaggerBaseApiResponseFor class
+                  ActivitiesOutputDto {
+
+                  } 
+      tags: *ref_3
+info:
+  title: Hue Hub Dex API
+  description: Hue Hub Dex API description
+  version: '1.0'
+  contact: {}
+tags: []
+servers: []
+components:
+  schemas:
+    AssetsInputDto:
+      type: object
+      properties:
+        clusterTypeHash:
+          type: string
+          description: collection type hash
+        fullUTXO:
+          type: boolean
+          description: Indicates whether to return detailed utxo information
+    CollectionInfo:
+      type: object
+      properties:
+        id:
+          type: number
+          description: collection id
+        iconUrl:
+          type: string
+          description: collection url
+        name:
+          type: string
+          description: collection name
+        description:
+          type: string
+          description: collection description
+        price:
+          type: string
+          description: The btc price, unit Satoshi / nft
+        usdPrice:
+          type: string
+          description: The btc price in USD
+        amount:
+          type: number
+          description: dobs nft amount
+        decimal:
+          type: number
+          description: dobs nft decimal
+        utxoCount:
+          type: number
+          description: dobs collect utxo count
+        clusterArgs:
+          type: string
+          description: cluster type args
+        clusterTypeHash:
+          type: string
+          description: cluster type hash
+      required:
+        - id
+        - iconUrl
+        - name
+        - description
+        - price
+        - usdPrice
+        - amount
+        - decimal
+        - utxoCount
+        - clusterArgs
+    UTXOInfo:
+      type: object
+      properties:
+        txHash:
+          type: string
+          description: utxo tx hash
+        index:
+          type: number
+          description: utxo index
+        value:
+          type: string
+          description: btc value
+        status:
+          type: number
+          enum:
+            - 0
+            - 1
+            - 2
+            - 3
+          description: 0:ListUtxo 1:ListPendingUtox,2:LiveBtcUtxo,3:FreezeBtcUtxo
+        sporeTypeHash:
+          type: number
+          description: utxo bind spore type hash
+        sporeArgs:
+          type: number
+          description: utxo bind spore args
+        itemId:
+          type: number
+          description: utxo bind item id
+        name:
+          type: string
+          description: dobs collections name
+        prevBg:
+          type: string
+          description: spore prevBg base64  data
+        prevBgColor:
+          type: string
+          description: spore prev.bgcolor
+        prevType:
+          type: string
+          description: spore prev.type
+        dobId:
+          type: string
+          description: spore dobId
+      required:
+        - txHash
+        - index
+        - value
+        - status
+        - sporeTypeHash
+        - sporeArgs
+    AssetInfo:
+      type: object
+      properties:
+        collectionInfo:
+          description: ' Dobs collection info'
+          allOf:
+            - $ref: '#/components/schemas/CollectionInfo'
+        utxos:
+          description: >-
+            When fullUTXO is true, return detailed information. If false, return
+            empty
+          type: array
+          items:
+            $ref: '#/components/schemas/UTXOInfo'
+      required:
+        - collectionInfo
+        - utxos
+    AssetsOutputDto:
+      type: object
+      properties:
+        collections:
+          description: nft asset list
+          type: array
+          items:
+            $ref: '#/components/schemas/AssetInfo'
+        balance:
+          type: string
+          description: btc balance
+        availableBalance:
+          type: string
+          description: available btc balance
+        frozenBalance:
+          type: string
+          description: frozen btc balance
+      required:
+        - collections
+        - balance
+        - availableBalance
+        - frozenBalance
+    "SwaggerBaseApiResponseFor class AssetsOutputDto {\n} ":
+      type: object
+      properties:
+        code:
+          type: number
+          description: >-
+            200:success;4000:parameter exception 4001:Item invalid;4002:Service
+            fee not match;4003:Psbt not match;4004:Ckb tx not
+            match;4005:Signature error,4006:Item is existing
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/AssetsOutputDto'
+      required:
+        - code
+        - message
+        - data
+    CollectionInfoDto:
+      type: object
+      properties:
+        id:
+          type: number
+          description: collection id
+        iconUrl:
+          type: string
+          description: collection url
+        name:
+          type: string
+          description: collection name
+        clusterTypeHash:
+          type: string
+          description: collection type hash
+        clusterTypeArgs:
+          type: number
+          enum: []
+          description: collection args
+        supply:
+          type: string
+          description: dobs total supply
+        price:
+          type: string
+          description: The btc price, unit Satoshi / nft
+        usdPrice:
+          type: string
+          description: The btc price in USD
+        change:
+          type: string
+          description: dobs usd price
+        volume:
+          type: string
+          description: dobs volume in Satoshi
+        usdVolume:
+          type: string
+          description: dobs usd volume
+        marketCap:
+          type: string
+          description: dobs market cap in Satoshi
+        usdMarketCap:
+          type: string
+          description: dobs usd market cap
+        holders:
+          type: string
+          description: dobs holders number
+        holdersChange:
+          type: string
+          description: dobs holders changer
+        sales:
+          type: string
+          description: dobs sales changer
+        decimal:
+          type: number
+          description: dobs nft decimal
+      required:
+        - id
+        - iconUrl
+        - name
+        - clusterTypeHash
+        - clusterTypeArgs
+        - supply
+        - decimal
+    CollectionOutputDto:
+      type: object
+      properties:
+        list:
+          description: dobs sales changer
+          type: array
+          items:
+            $ref: '#/components/schemas/CollectionInfoDto'
+      required:
+        - list
+    "SwaggerBaseApiResponseFor class CollectionOutputDto {\n} ":
+      type: object
+      properties:
+        code:
+          type: number
+          description: >-
+            200:success;4000:parameter exception 4001:Item invalid;4002:Service
+            fee not match;4003:Psbt not match;4004:Ckb tx not
+            match;4005:Signature error,4006:Item is existing
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/CollectionOutputDto'
+      required:
+        - code
+        - message
+        - data
+    "SwaggerBaseApiResponseFor class CollectionInfoDto {\n} ":
+      type: object
+      properties:
+        code:
+          type: number
+          description: >-
+            200:success;4000:parameter exception 4001:Item invalid;4002:Service
+            fee not match;4003:Psbt not match;4004:Ckb tx not
+            match;4005:Signature error,4006:Item is existing
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/CollectionInfoDto'
+      required:
+        - code
+        - message
+        - data
+    ItemInfo:
+      type: object
+      properties:
+        id:
+          type: number
+          description: item id
+        sellerAddress:
+          type: string
+          description: seller address
+        txHash:
+          type: string
+          description: dobs utxo tx hash
+        index:
+          type: number
+          description: dobs utxo index
+        btcValue:
+          type: number
+          description: utxo btc value
+        name:
+          type: string
+          description: dobs collections name
+        prevBg:
+          type: string
+          description: spore prevBg base64  data
+        prevBgColor:
+          type: string
+          description: spore prev.bgcolor
+        prevType:
+          type: string
+          description: spore prev.type
+        dobId:
+          type: string
+          description: spore dobId
+        sporeArgs:
+          type: string
+          description: rgbpp spore type args
+        sporeTypeHash:
+          type: string
+          description: rgbpp spore type hash
+        price:
+          type: string
+          description: The btc price, unit Satoshi / nft
+        usdPrice:
+          type: string
+          description: The btc price in USD
+        status:
+          type: number
+          enum: &ref_4
+            - 0
+            - 1
+          description: 0:Pending 1:Complete
+      required:
+        - id
+        - sellerAddress
+        - txHash
+        - index
+        - btcValue
+        - name
+        - sporeArgs
+        - sporeTypeHash
+        - price
+        - usdPrice
+        - status
+    ItemListOutputDto:
+      type: object
+      properties:
+        list:
+          description: item list
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemInfo'
+        total:
+          type: number
+          description: item total length
+      required:
+        - list
+        - total
+    "SwaggerBaseApiResponseFor class ItemListOutputDto {\n} ":
+      type: object
+      properties:
+        code:
+          type: number
+          description: >-
+            200:success;4000:parameter exception 4001:Item invalid;4002:Service
+            fee not match;4003:Psbt not match;4004:Ckb tx not
+            match;4005:Signature error,4006:Item is existing
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/ItemListOutputDto'
+      required:
+        - code
+        - message
+        - data
+    ListItemInput:
+      type: object
+      properties:
+        clusterTypeHash:
+          type: string
+          description: collection type hash
+        txHash:
+          type: string
+          description: btc utxo hash
+        index:
+          type: number
+          description: btc utxo index
+        sporeArgs:
+          type: string
+          description: ckb spore spore args
+        sporeTypeHash:
+          type: string
+          description: ckb spore spore type hash
+        price:
+          type: string
+          description: sell btc price uit satoshi
+        psbt:
+          type: string
+          description: btc psbt string
+        psbtSig:
+          type: string
+          description: btc psbt sig
+      required:
+        - clusterTypeHash
+        - txHash
+        - index
+        - sporeArgs
+        - sporeTypeHash
+        - price
+        - psbt
+        - psbtSig
+    ListItemsInputDto:
+      type: object
+      properties:
+        items:
+          description: sell dobs btc amount
+          type: array
+          items:
+            $ref: '#/components/schemas/ListItemInput'
+      required:
+        - items
+    ListItemsOutputDto:
+      type: object
+      properties:
+        itemIds:
+          description: item ids
+          type: array
+          items:
+            type: number
+      required:
+        - itemIds
+    "SwaggerBaseApiResponseFor class ListItemsOutputDto {\n} ":
+      type: object
+      properties:
+        code:
+          type: number
+          description: >-
+            200:success;4000:parameter exception 4001:Item invalid;4002:Service
+            fee not match;4003:Psbt not match;4004:Ckb tx not
+            match;4005:Signature error,4006:Item is existing
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/ListItemsOutputDto'
+      required:
+        - code
+        - message
+        - data
+    ItemPSBTInputDto:
+      type: object
+      properties:
+        itemIds:
+          description: dobs items id
+          type: array
+          items:
+            type: number
+      required:
+        - itemIds
+    ItemPSBT:
+      type: object
+      properties:
+        itemId:
+          type: number
+          description: items id
+        psbt:
+          type: string
+          description: Unsigned PSBT
+      required:
+        - itemId
+        - psbt
+    ItemPSBTOutputDto:
+      type: object
+      properties:
+        psbts:
+          description: dobs items id
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemPSBT'
+        feeAddress:
+          type: string
+          description: receive service fee btc address
+        feeRate:
+          type: string
+          description: service fee rate
+        minServiceFee:
+          type: string
+      required:
+        - psbts
+        - feeAddress
+        - feeRate
+        - minServiceFee
+    "SwaggerBaseApiResponseFor class ItemPSBTOutputDto {\n} ":
+      type: object
+      properties:
+        code:
+          type: number
+          description: >-
+            200:success;4000:parameter exception 4001:Item invalid;4002:Service
+            fee not match;4003:Psbt not match;4004:Ckb tx not
+            match;4005:Signature error,4006:Item is existing
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/ItemPSBTOutputDto'
+      required:
+        - code
+        - message
+        - data
+    CKBTransaction:
+      type: object
+      properties:
+        rgbppLockArgsList:
+          description: dobs lock args list
+          type: array
+          items:
+            type: string
+        sporeTypeArgsList:
+          description: dobs type args list
+          type: array
+          items:
+            type: string
+      required:
+        - rgbppLockArgsList
+        - sporeTypeArgsList
+    BuyItemsInputDto:
+      type: object
+      properties:
+        itemIds:
+          description: dobs items id list
+          type: array
+          items:
+            type: number
+        marketFee:
+          type: string
+          description: dobs marketFee
+        transactionFee:
+          type: string
+          description: dobs transaction fee
+        signedBTCTransaction:
+          type: string
+          description: dobs btc sign tx
+        rgbppCKBTransaction:
+          description: dobs transaction fee
+          allOf:
+            - $ref: '#/components/schemas/CKBTransaction'
+      required:
+        - itemIds
+        - marketFee
+        - transactionFee
+        - signedBTCTransaction
+        - rgbppCKBTransaction
+    BuyItemsOutputDto:
+      type: object
+      properties:
+        status:
+          type: number
+          enum:
+            - 0
+            - 1
+            - 2
+          description: order status:0:Pending,1:Completed,2:Failed
+        btcTransactionHash:
+          type: string
+          description: btc tx hash
+      required:
+        - status
+        - btcTransactionHash
+    "SwaggerBaseApiResponseFor class BuyItemsOutputDto {\n} ":
+      type: object
+      properties:
+        code:
+          type: number
+          description: >-
+            200:success;4000:parameter exception 4001:Item invalid;4002:Service
+            fee not match;4003:Psbt not match;4004:Ckb tx not
+            match;4005:Signature error,4006:Item is existing
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/BuyItemsOutputDto'
+      required:
+        - code
+        - message
+        - data
+    UnlistItemsInputDto:
+      type: object
+      properties:
+        itemIds:
+          description: 'dobs items ids '
+          type: array
+          items:
+            type: number
+        transactionFee:
+          type: string
+          description: dobs transaction fee
+        signedBTCTransaction:
+          type: string
+          description: dobs btc signed transaction
+        rgbppCKBTransaction:
+          description: dobs ckb transaction
+          allOf:
+            - $ref: '#/components/schemas/CKBTransaction'
+      required:
+        - itemIds
+        - transactionFee
+        - signedBTCTransaction
+        - rgbppCKBTransaction
+    UnlistItemsOutputDto:
+      type: object
+      properties:
+        status:
+          type: number
+          enum:
+            - 0
+            - 1
+            - 2
+          description: order status:0:Pending,1:Completed,2:Failed
+        btcTransactionHash:
+          type: string
+          description: btc tx hash
+      required:
+        - status
+        - btcTransactionHash
+    "SwaggerBaseApiResponseFor class UnlistItemsOutputDto {\n} ":
+      type: object
+      properties:
+        code:
+          type: number
+          description: >-
+            200:success;4000:parameter exception 4001:Item invalid;4002:Service
+            fee not match;4003:Psbt not match;4004:Ckb tx not
+            match;4005:Signature error,4006:Item is existing
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/UnlistItemsOutputDto'
+      required:
+        - code
+        - message
+        - data
+    OrderInfo:
+      type: object
+      properties:
+        id:
+          type: number
+          description: item id
+        sellerAddress:
+          type: string
+          description: seller address
+        txHash:
+          type: string
+          description: dobs utxo tx hash
+        index:
+          type: number
+          description: dobs utxo index
+        btcValue:
+          type: number
+          description: utxo btc value
+        name:
+          type: string
+          description: dobs collections name
+        prevBg:
+          type: string
+          description: spore prevBg base64  data
+        prevBgColor:
+          type: string
+          description: spore prev.bgcolor
+        prevType:
+          type: string
+          description: spore prev.type
+        dobId:
+          type: string
+          description: spore dobId
+        sporeArgs:
+          type: string
+          description: rgbpp spore type args
+        sporeTypeHash:
+          type: string
+          description: rgbpp spore type hash
+        price:
+          type: string
+          description: The btc price, unit Satoshi / nft
+        usdPrice:
+          type: string
+          description: The btc price in USD
+        status:
+          type: number
+          enum: *ref_4
+          description: 0:Pending 1:Complete
+        type:
+          type: number
+          enum:
+            - 0
+            - 1
+            - 2
+            - 3
+            - 4
+          description: query order type enum,0:Listing,1:SoldOut,2:Bought,3:Unlist
+        createdTime:
+          type: number
+          enum: []
+          description: order create timestamp unit Second
+        from:
+          type: number
+          enum: []
+          description: sellerAddress address
+        to:
+          type: number
+          enum: []
+          description: buyerAddress address
+        btcTxHash:
+          type: number
+          enum: []
+          description: order btc tx hash
+        ckbTxHash:
+          type: number
+          enum: []
+          description: order ckb tx hash
+      required:
+        - id
+        - sellerAddress
+        - txHash
+        - index
+        - btcValue
+        - name
+        - sporeArgs
+        - sporeTypeHash
+        - price
+        - usdPrice
+        - status
+        - type
+        - createdTime
+        - from
+    MyOrdersOutput:
+      type: object
+      properties:
+        list:
+          description: my order list
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderInfo'
+        total:
+          type: number
+          enum: []
+          description: total order number
+      required:
+        - list
+        - total
+    "SwaggerBaseApiResponseFor class MyOrdersOutput {\n} ":
+      type: object
+      properties:
+        code:
+          type: number
+          description: >-
+            200:success;4000:parameter exception 4001:Item invalid;4002:Service
+            fee not match;4003:Psbt not match;4004:Ckb tx not
+            match;4005:Signature error,4006:Item is existing
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/MyOrdersOutput'
+      required:
+        - code
+        - message
+        - data
+    ActivitiesOutput:
+      type: object
+      properties:
+        type:
+          type: number
+          enum:
+            - 0
+            - 1
+            - 2
+            - 3
+            - 4
+          description: 'query order type enum,0:All,1:Sale,2:List,3:Transfer 4: Unlist'
+        createdTime:
+          type: number
+          enum: []
+          description: order create timestamp unit second
+        btcTxHash:
+          type: number
+          enum: []
+          description: order btc tx hash
+        ckbTxHash:
+          type: number
+          enum: []
+          description: order ckb tx hash
+        id:
+          type: number
+          description: item id
+        from:
+          type: string
+          description: seller address
+        to:
+          type: string
+          description: buyer address
+        name:
+          type: string
+          description: dobs name
+        price:
+          type: string
+          description: sell dobs btc Satoshi
+        decimal:
+          type: number
+          description: sell dobs decimal
+        usdPrice:
+          type: string
+          description: USD price of sale
+        status:
+          type: number
+          enum:
+            - 0
+            - 1
+          description: 0:Displaying loading 1:Do not display loading
+      required:
+        - type
+        - createdTime
+        - id
+        - from
+        - name
+        - price
+        - decimal
+        - usdPrice
+        - status
+    ActivitiesOutputDto:
+      type: object
+      properties:
+        list:
+          description: my order list
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivitiesOutput'
+        total:
+          type: number
+          enum: []
+          description: total order number
+      required:
+        - list
+        - total
+    "SwaggerBaseApiResponseFor class ActivitiesOutputDto {\n} ":
+      type: object
+      properties:
+        code:
+          type: number
+          description: >-
+            200:success;4000:parameter exception 4001:Item invalid;4002:Service
+            fee not match;4003:Psbt not match;4004:Ckb tx not
+            match;4005:Signature error,4006:Item is existing
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/ActivitiesOutputDto'
+      required:
+        - code
+        - message
+        - data

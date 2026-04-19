@@ -1,0 +1,183 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+import Icon from "../components/Icon.astro";
+import { HERO, FEATURES, FAQ } from "../content";
+---
+<BaseLayout title="Solagram — Solana wallet in Telegram" description={HERO.sub}>
+  <Header />
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-grid">
+      <div>
+        <span class="eyebrow">{HERO.eyebrow}</span>
+        <h1>{HERO.headline}</h1>
+        <p class="sub">{HERO.sub}</p>
+        <div class="cta-row">
+          <a class="btn primary" href={HERO.ctaPrimary.href}>
+            {HERO.ctaPrimary.label}
+            <Icon name="arrow-right" size={16} />
+          </a>
+          <a class="btn ghost" href={HERO.ctaSecondary.href}>{HERO.ctaSecondary.label}</a>
+        </div>
+        <ul class="hero-bullets" role="list">
+          <li><Icon name="check" size={16} />Non-custodial keys</li>
+          <li><Icon name="check" size={16} />Open-source</li>
+          <li><Icon name="check" size={16} />Audited contracts</li>
+        </ul>
+      </div>
+      <div class="phone-mock" aria-hidden="true">
+        <div class="phone">
+          <div class="phone-screen">
+            <div class="screen-row"><span>Balance</span><span class="mono">12.34 SOL</span></div>
+            <div class="screen-row"><span>USDC</span><span class="mono">1,240.00</span></div>
+            <div class="screen-row"><span>JUP</span><span class="mono">850.00</span></div>
+            <button class="screen-cta">Send to @alice</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section id="features" class="section">
+    <h2>Built for chat-native crypto.</h2>
+    <div class="feature-grid">
+      {FEATURES.map((f) => (
+        <article class="feature-card">
+          <div class="feature-icon"><Icon name={f.icon} size={22} /></div>
+          <h3>{f.title}</h3>
+          <p>{f.body}</p>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section id="faq" class="section">
+    <h2>Questions, answered.</h2>
+    <div class="faq">
+      {FAQ.map((item) => (
+        <details>
+          <summary>{item.q}</summary>
+          <p>{item.a}</p>
+        </details>
+      ))}
+    </div>
+  </section>
+
+  <Footer />
+</BaseLayout>
+
+<style>
+  .hero {
+    padding: var(--space-16) var(--space-8) var(--space-12);
+    background:
+      radial-gradient(ellipse 60% 40% at 80% 0%, var(--accent-ghost), transparent 70%),
+      radial-gradient(ellipse 50% 50% at 10% 100%, #3b82f622, transparent 70%);
+  }
+  .hero-grid {
+    display: grid; grid-template-columns: 1.2fr 1fr; gap: var(--space-12);
+    max-width: 1100px; margin: 0 auto; align-items: center;
+  }
+  @media (max-width: 900px) { .hero-grid { grid-template-columns: 1fr; } }
+  .eyebrow {
+    display: inline-block; padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--border-bright); border-radius: var(--radius-full);
+    font-size: var(--text-xs); color: var(--fg-dim);
+    margin-bottom: var(--space-4);
+  }
+  .hero h1 {
+    font-size: clamp(2rem, 5vw, 3.5rem); line-height: 1.05;
+    letter-spacing: -0.02em; margin: 0 0 var(--space-5);
+    background: linear-gradient(135deg, var(--fg), var(--accent));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .sub { font-size: var(--text-lg); color: var(--fg-dim); max-width: 42ch; }
+  .cta-row { display: flex; gap: var(--space-3); margin-top: var(--space-6); flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: var(--space-2);
+    padding: var(--space-3) var(--space-5);
+    border-radius: var(--radius-full); font-weight: 600; font-size: var(--text-sm);
+  }
+  .btn.primary { background: var(--accent); color: var(--accent-fg); }
+  .btn.primary:hover { background: var(--accent-hover); color: var(--accent-fg); }
+  .btn.ghost { color: var(--fg); border: 1px solid var(--border-bright); }
+  .btn.ghost:hover { background: var(--surface-2); color: var(--fg); }
+  .hero-bullets {
+    list-style: none; padding: 0; margin: var(--space-8) 0 0;
+    display: flex; gap: var(--space-6); color: var(--fg-dim); font-size: var(--text-sm);
+  }
+  .hero-bullets li { display: flex; gap: var(--space-1); align-items: center; }
+
+  /* Phone mockup — hand-drawn with pure CSS, no image asset needed. */
+  .phone-mock { display: grid; place-items: center; }
+  .phone {
+    width: 280px; height: 560px; border-radius: 40px;
+    padding: 14px; background: #1a1a24;
+    box-shadow: var(--shadow-md), 0 0 80px -20px var(--accent);
+    border: 1px solid var(--border-bright);
+  }
+  .phone-screen {
+    height: 100%; border-radius: 28px; padding: var(--space-6);
+    background: linear-gradient(160deg, #171720, #0d0d14);
+    display: flex; flex-direction: column; gap: var(--space-3);
+  }
+  .screen-row {
+    display: flex; justify-content: space-between;
+    padding: var(--space-3);
+    background: var(--surface-2); border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+  }
+  .mono { font-family: var(--font-mono); color: var(--accent); }
+  .screen-cta {
+    margin-top: auto; padding: var(--space-3);
+    background: var(--accent); color: var(--accent-fg);
+    border-radius: var(--radius-md); font-weight: 600;
+  }
+
+  .section {
+    max-width: 1100px; margin: 0 auto;
+    padding: var(--space-16) var(--space-8);
+  }
+  .section h2 {
+    font-size: var(--text-3xl); letter-spacing: -0.02em;
+    margin: 0 0 var(--space-10);
+  }
+  .feature-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-5);
+  }
+  @media (max-width: 900px) { .feature-grid { grid-template-columns: 1fr; } }
+  .feature-card {
+    padding: var(--space-6);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+  }
+  .feature-icon {
+    width: 40px; height: 40px; border-radius: var(--radius-md);
+    display: grid; place-items: center;
+    background: var(--accent-ghost); color: var(--accent);
+    margin-bottom: var(--space-4);
+  }
+  .feature-card h3 { margin: 0 0 var(--space-2); font-size: var(--text-lg); }
+  .feature-card p { margin: 0; color: var(--fg-dim); font-size: var(--text-sm); }
+
+  .faq { display: grid; gap: var(--space-2); max-width: 720px; }
+  details {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: var(--space-4) var(--space-5);
+  }
+  details[open] { border-color: var(--accent-ghost); }
+  summary {
+    cursor: pointer; font-weight: 600; list-style: none;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  summary::after {
+    content: "+"; color: var(--muted);
+    transition: transform 0.15s ease;
+  }
+  details[open] summary::after { content: "−"; color: var(--accent); }
+  details p { margin: var(--space-3) 0 0; color: var(--fg-dim); font-size: var(--text-sm); }
+</style>

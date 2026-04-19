@@ -1,0 +1,3 @@
+upstream: NONE (greenfield rewrite)
+stack: Vite + React + unipass-wallet-js
+estimate: 7 days

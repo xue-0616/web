@@ -1,0 +1,57 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+---
+<BaseLayout title="Legal — Solagram">
+  <Header />
+  <main class="prose">
+    <h1>Terms &amp; Legal</h1>
+    <p class="muted">Last updated: 2026-04-01</p>
+
+    <h2>1. Non-custodial wallet</h2>
+    <p>
+      Solagram is a non-custodial wallet. Your private keys are generated
+      and stored client-side. Solagram Labs does not hold, see, or have
+      the ability to recover your keys or funds. If you lose your
+      passphrase and all devices where Solagram is installed, your funds
+      are unrecoverable.
+    </p>
+
+    <h2>2. No investment advice</h2>
+    <p>
+      Content shown in Solagram (prices, charts, token listings, swap
+      quotes) is informational only and does not constitute financial,
+      investment, or tax advice. You are solely responsible for your
+      trading decisions.
+    </p>
+
+    <h2>3. Third-party services</h2>
+    <p>
+      Solagram integrates Jupiter (swap routing), Telegram (UI host),
+      and Solana RPC providers. Your use of Solagram is subject to the
+      terms of these services.
+    </p>
+
+    <h2>4. Open source</h2>
+    <p>
+      Solagram's client is open source under Apache-2.0. See
+      <a href="https://github.com/solagram">the repo</a>. No part of the
+      code requires trust in Solagram Labs.
+    </p>
+
+    <h2>5. Contact</h2>
+    <p>Security disclosures: <a href="mailto:security@solagram.example">security@solagram.example</a>.</p>
+  </main>
+  <Footer />
+</BaseLayout>
+<style>
+  .prose {
+    max-width: 720px; margin: 0 auto;
+    padding: var(--space-12) var(--space-8);
+    color: var(--fg-dim); font-size: var(--text-base); line-height: 1.7;
+  }
+  .prose h1 { color: var(--fg); font-size: var(--text-3xl); letter-spacing: -0.02em; margin-bottom: 0; }
+  .prose h2 { color: var(--fg); font-size: var(--text-lg); margin-top: var(--space-10); }
+  .prose .muted { color: var(--muted); font-size: var(--text-sm); }
+</style>

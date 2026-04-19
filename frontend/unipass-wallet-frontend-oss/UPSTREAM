@@ -1,0 +1,3 @@
+upstream: NONE (greenfield rewrite)
+stack: Vue 3 + Vite + UniPass-Wallet-JS
+estimate: 14 days

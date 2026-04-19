@@ -1,0 +1,52 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+import { DOWNLOADS } from "../content";
+---
+<BaseLayout title="Download — Solagram">
+  <Header />
+  <main class="content">
+    <h1>Get Solagram</h1>
+    <p>Solagram runs inside Telegram and the browser. Pick your path.</p>
+    <ul class="platforms" role="list">
+      {DOWNLOADS.map((d) => (
+        <li>
+          <div>
+            <h2>{d.platform}</h2>
+            <p>{d.label}</p>
+          </div>
+          <a class="btn" href={d.href}>Open</a>
+        </li>
+      ))}
+    </ul>
+    <p class="hint">
+      No store listing? Solagram is a Telegram Mini App + web app — no
+      app-store download required.
+    </p>
+  </main>
+  <Footer />
+</BaseLayout>
+<style>
+  .content {
+    max-width: 720px; margin: 0 auto;
+    padding: var(--space-12) var(--space-8);
+  }
+  h1 { font-size: var(--text-3xl); letter-spacing: -0.02em; }
+  .platforms { list-style: none; padding: 0; display: grid; gap: var(--space-3); margin: var(--space-8) 0; }
+  .platforms li {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: var(--space-5);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+  }
+  .platforms h2 { margin: 0 0 var(--space-1); font-size: var(--text-lg); }
+  .platforms p { margin: 0; color: var(--fg-dim); font-size: var(--text-sm); }
+  .btn {
+    padding: var(--space-2) var(--space-5);
+    background: var(--accent); color: var(--accent-fg);
+    border-radius: var(--radius-full); font-weight: 600; font-size: var(--text-sm);
+  }
+  .btn:hover { background: var(--accent-hover); color: var(--accent-fg); }
+  .hint { color: var(--muted); font-size: var(--text-sm); }
+</style>

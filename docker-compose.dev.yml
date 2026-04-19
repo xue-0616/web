@@ -1,0 +1,123 @@
+# Developer-mode full-stack bootstrap.
+#
+#   docker compose -f docker-compose.dev.yml up --build
+#
+# Brings up the Track B Rust services that the Phase 6 / 7 frontends
+# talk to, along with their storage dependencies. Each service reads
+# its config from an env block below (override via `.env`).
+#
+# NOT a production compose — no secrets management, no persistent
+# volumes for databases outside `./data/`, no HTTPS. Production
+# deployment is per-service Dockerfile + orchestration of your choice.
+
+name: up-rebuild-dev
+
+services:
+  # ── Infrastructure ────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: dev_root
+      MYSQL_DATABASE: unipass
+      MYSQL_USER: unipass
+      MYSQL_PASSWORD: dev_pass
+    ports: ["3306:3306"]
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "unipass", "-pdev_pass"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    volumes:
+      - ./data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  # ── Track B Rust services (OSS rewrites) ──────────────────────────
+  paymaster-service:
+    build:
+      context: ./backend-rust/paymaster-service-oss
+    ports: ["3100:8080"]
+    environment:
+      RUST_LOG: info
+      CONFIG_PATH: /app/config.json
+    volumes:
+      - ./backend-rust/paymaster-service-oss/config.dev.json:/app/config.json:ro
+    # Optional: no infra dep — paymaster is stateless and ecrecovers locally.
+
+  unipass-snap-service:
+    build:
+      context: ./backend-rust/unipass-snap-service-oss
+    ports: ["3080:8080"]
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      RUST_LOG: info
+      CONFIG_PATH: /app/config.json
+    volumes:
+      - ./backend-rust/unipass-snap-service-oss/config.dev.json:/app/config.json:ro
+
+  rgbpp-indexer:
+    build:
+      context: ./backend-rust/huehub-rgbpp-indexer-oss
+    ports: ["8114:8114"]
+    environment:
+      RUST_LOG: info
+      CONFIG_PATH: /app/config.json
+    volumes:
+      - ./backend-rust/huehub-rgbpp-indexer-oss/config.dev.json:/app/config.json:ro
+      - ./data/rgbpp:/app/data
+
+  # ── Frontend dev previews (optional, heavyweight) ─────────────────
+  # Comment out any you're not actively working on.
+  # Each image hot-reloads so code changes under `frontend/*-oss/src`
+  # reflect immediately.
+  frontend-auth0:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm install --legacy-peer-deps && npm run dev"
+    volumes:
+      - ./frontend/unipass-auth0-verify-code-oss:/app
+    ports: ["3001:3000"]
+    profiles: ["frontend"]
+
+  frontend-payment:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm install --legacy-peer-deps && npm run dev -- --host 0.0.0.0"
+    volumes:
+      - ./frontend/unipass-payment-web-oss:/app
+    ports: ["3002:5173"]
+    profiles: ["frontend"]
+
+  frontend-wallet:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm install --legacy-peer-deps && npm run dev -- --host 0.0.0.0"
+    volumes:
+      - ./frontend/unipass-wallet-frontend-oss:/app
+    ports: ["3003:5173"]
+    profiles: ["frontend"]
+
+# ── How to use ────────────────────────────────────────────────────
+#
+# Backend only:
+#   docker compose -f docker-compose.dev.yml up mysql redis paymaster-service unipass-snap-service rgbpp-indexer
+#
+# With frontends (hot-reload):
+#   docker compose -f docker-compose.dev.yml --profile frontend up
+#
+# Tear down:
+#   docker compose -f docker-compose.dev.yml down -v
+#
+# Each `config.dev.json` is expected in its service's directory —
+# templates live alongside each service's Dockerfile. Copy from the
+# corresponding `config.example.json` and tweak.

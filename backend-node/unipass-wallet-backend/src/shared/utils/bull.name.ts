@@ -1,0 +1,16 @@
+export const SEND_EMAIL_QUEUE = 'sendEmailQueue';
+export const ACCOUNT_QUEUE = 'accountQueue';
+export const TRANSACTION_QUEUE = 'transactionQueue';
+export const ACTION_POINT_TRANSACTION_QUEUE = 'actionPointTransactionQueue';
+export const ZK_QUEUE = 'zkQueue';
+export const SEND_ZK_REQUEST_PROOF_JOB = 'sendZkRequsetProofJob';
+export const SEND_ZK_QUERY_PROOF_JOB = 'sendZkQueryProofJob';
+export const SEND_EMAIL_CODE_JOB = 'sendEmailcodeJob';
+export const SEND_GUARDIAN_EMAIL_JOB = 'sendGuardianEmailJob';
+export const SEND_RECOVERY_EMAIL_JOB = 'sendRecoveryEmailJob';
+export const SEND_TRANSACTION_JOB = 'sendTransactionJob';
+export const SYNC_TRANSACTION_JOB = 'syncTransactionJob';
+export const SEND_NOTIFY_EMAIL_JOB = 'sendNotifyEmailJob';
+export const SEND_PHONE_CODE_JOB = 'sendPhonecodeJob';
+export const SEND_SYNC_ACCOUNT_JOB = 'sendSyncAccountJob';
+export const SEND_SYNC_ACTION_POINT_TRANSACTION_STATUS_JOB = 'sendSyncPointTransactionStatusJob';

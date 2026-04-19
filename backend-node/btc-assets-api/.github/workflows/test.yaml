@@ -1,0 +1,64 @@
+---
+name: Unit Tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        BITCOIN_DATA_PROVIDER: [mempool, electrs]
+
+    services:
+      redis:
+        image: redis
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Install PNPM
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
+
+      - name: Use Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "21"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Run Unit Tests
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          BITCOIN_DATA_PROVIDER: ${{ matrix.BITCOIN_DATA_PROVIDER }}
+          BITCOIN_MEMPOOL_SPACE_API_URL: ${{ secrets.BITCOIN_MEMPOOL_SPACE_API_URL }}
+          BITCOIN_ELECTRS_API_URL: ${{ secrets.BITCOIN_ELECTRS_API_URL }}
+          BITCOIN_SPV_SERVICE_URL: ${{ secrets.BITCOIN_SPV_SERVICE_URL }}
+          PAYMASTER_RECEIVE_BTC_ADDRESS: ${{ secrets.PAYMASTER_RECEIVE_BTC_ADDRESS }}
+          CKB_RPC_URL: ${{ secrets.CKB_RPC_URL }}
+          CKB_INDEXER_URL: ${{ secrets.CKB_INDEXER_URL }}
+          PAYMASTER_PRIVATE_KEY: ${{ secrets.PAYMASTER_PRIVATE_KEY }}
+          REDIS_URL: redis://localhost:6379
+          CI_REDIS_URL: redis://localhost:6379
+        run: pnpm test

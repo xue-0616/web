@@ -1,0 +1,4 @@
+upstream: UniPass-Wallet-Snap
+local: ../../upstream/UniPass-Wallet-Snap
+subpath: packages/up-frontend (React)
+builder: npm-monorepo

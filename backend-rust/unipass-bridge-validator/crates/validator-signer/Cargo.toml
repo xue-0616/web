@@ -1,0 +1,11 @@
+[package]
+name = "validator-signer"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+ethers.workspace = true
+anyhow.workspace = true
+hex.workspace = true
+tracing.workspace = true
+k256.workspace = true
+sha3.workspace = true

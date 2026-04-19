@@ -1,0 +1,19 @@
+[package]
+name = "relayer"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+actix-web.workspace = true
+sea-orm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+ethers.workspace = true
+hex.workspace = true
+chrono.workspace = true
+api = { path = "../api" }
+daos-relayer = { path = "../daos-relayer" }
+execute-validator = { path = "../execute-validator" }
+contracts-abi = { path = "../contracts-abi" }
+configs = { path = "../configs" }

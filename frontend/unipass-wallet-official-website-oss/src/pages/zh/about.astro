@@ -1,0 +1,12 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { COPY } from "../../content";
+const c = COPY["zh-CN"].about;
+---
+<BaseLayout title="关于" locale="zh-CN">
+  <section style="padding: 4rem 0; max-width: 40rem;">
+    <h1>{c.headline}</h1>
+    <p>{c.body}</p>
+    <p><a href="/zh/">← 返回首页</a></p>
+  </section>
+</BaseLayout>

@@ -1,0 +1,29 @@
+---
+/**
+ * Lightweight SVG icon set. Hand-tuned 24x24 paths — avoiding an
+ * external icon lib keeps the marketing bundle < 5KB of SVG and
+ * means the site works with JS disabled.
+ */
+type Name = "wallet" | "chat" | "lock" | "zap" | "globe" | "coin" | "check" | "arrow-right";
+const { name, size = 24 } = Astro.props as { name: Name; size?: number };
+
+const PATHS: Record<Name, string> = {
+  wallet: "M3 7h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Zm0 0V5a2 2 0 0 1 2-2h11v4M16 13h3",
+  chat:   "M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H10l-4 4v-4H6a2 2 0 0 1-2-2V5Z",
+  lock:   "M7 10V7a5 5 0 0 1 10 0v3M5 10h14v10H5V10Zm7 4v3",
+  zap:    "M13 3 4 14h7l-1 7 9-11h-7l1-7Z",
+  globe:  "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm-9 9h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18",
+  coin:   "M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18Zm0-5a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z",
+  check:  "m5 12 5 5L20 7",
+  "arrow-right": "M5 12h14m-6-6 6 6-6 6",
+};
+---
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width={size} height={size} viewBox="0 0 24 24"
+  fill="none" stroke="currentColor" stroke-width="2"
+  stroke-linecap="round" stroke-linejoin="round"
+  aria-hidden="true"
+>
+  <path d={PATHS[name]} />
+</svg>

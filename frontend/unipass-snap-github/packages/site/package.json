@@ -1,0 +1,78 @@
+{
+	"name": "@unipasswallet/payment-site",
+	"version": "0.1.0",
+	"private": true,
+	"scripts": {
+		"build:dev": "sh bin/dev_build.sh",
+		"build:prod": "sh bin/prod.sh",
+		"build:staging": "sh bin/staging.sh",
+		"build:test": "sh bin/test.sh",
+		"start": "sh bin/dev.sh",
+		"test": "craco test"
+	},
+	"browserslist": {
+		"production": [
+			">0.2%",
+			"not dead",
+			"not op_mini all"
+		],
+		"development": [
+			"last 1 chrome version",
+			"last 1 firefox version",
+			"last 1 safari version"
+		]
+	},
+	"eslintConfig": {
+		"extends": [
+			"react-app",
+			"react-app/jest"
+		]
+	},
+	"dependencies": {
+		"@unipasswallet/smart-account": "0.1.0-alpha.23",
+		"@web3-react/core": "8.2.0",
+		"@web3-react/metamask": "^8.2.1",
+		"@web3-react/types": "8.2.0",
+		"ahooks": "^3.7.7",
+		"axios": "^1.4.0",
+		"clsx": "^1.2.1",
+		"dayjs": "^1.11.7",
+		"eip1193-provider": "^1.0.1",
+		"ethers": "5.7.1",
+		"numbro": "^2.3.6",
+		"qrcode.react": "^3.1.0",
+		"rc-checkbox": "3.0.1",
+		"rc-select": "^14.5.2",
+		"rc-slider": "10.2.0",
+		"rc-switch": "4.1.0",
+		"rc-table": "^7.32.1",
+		"rc-tooltip": "6.0.1",
+		"react": "^18.2.0",
+		"react-confetti": "^6.1.0",
+		"react-copy-to-clipboard": "^5.1.0",
+		"react-dom": "^18.2.0",
+		"react-ga4": "^2.1.0",
+		"react-hook-form": "^7.44.2",
+		"react-hot-toast": "2.4.1",
+		"react-modal": "3.16.1",
+		"react-router-dom": "6",
+		"react-scripts": "5.0.1",
+		"recoil": "^0.7.7",
+		"sass": "^1.62.1",
+		"web-vitals": "^2.1.4"
+	},
+	"devDependencies": {
+		"@craco/craco": "^7.1.0",
+		"@testing-library/jest-dom": "^5.16.5",
+		"@testing-library/react": "^13.4.0",
+		"@testing-library/user-event": "^13.5.0",
+		"@types/jest": "^27.5.2",
+		"@types/node": "^16.18.36",
+		"@types/react": "^18.2.12",
+		"@types/react-copy-to-clipboard": "^5.0.4",
+		"@types/react-dom": "^18.2.5",
+		"@types/react-modal": "^3.16.0",
+		"babel-plugin-transform-remove-console": "^6.9.4",
+		"craco-sass-resources-loader": "^1.1.0"
+	}
+}

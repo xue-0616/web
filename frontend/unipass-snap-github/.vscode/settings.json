@@ -1,0 +1,23 @@
+{
+	"json.schemas": [
+		{
+			"fileMatch": ["snap.manifest.json"],
+			"url": "https://raw.githubusercontent.com/MetaMask/SIPs/main/assets/sip-9/snap.manifest.schema.json"
+		}
+	],
+	"cSpell.words": [
+    "ahooks",
+    "avax",
+    "bignumber",
+    "clsx",
+    "craco",
+    "ethersproject",
+    "gtag",
+    "Inpage",
+    "numbro",
+    "qrcode",
+    "topup",
+    "TTFB"
+  ],
+  "svg.preview.background": "custom"
+}

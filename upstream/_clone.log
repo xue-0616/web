@@ -1,0 +1,17 @@
+[skip-exist] UniPass-OpenID-Auth
+[skip-exist] rgbpp
+[skip-exist] utxo-allocator
+[skip-exist] account-abstraction
+[skip-exist] stackup-bundler
+[skip-exist] UniPass-Snap
+[skip-exist] UniPass-email-circuits
+[skip-exist] UniPass-Tss-Lib
+[skip-exist] unipass-frontend-test
+[skip-exist] UniPass-Wallet-Docs
+[skip-exist] smart-account-vite-demo
+[skip-exist] UniPass-Wallet-Snap
+[skip-exist] UniPass-Wallet-JS
+[skip-exist] utxo-stack-sdk
+[ok] solana-programs
+[ok] solana-token-tracker
+[ok] substreams-sink-sql

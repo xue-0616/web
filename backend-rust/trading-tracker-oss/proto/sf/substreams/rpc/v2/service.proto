@@ -1,0 +1,459 @@
+syntax = "proto3";
+
+package sf.substreams.rpc.v2;
+
+import "google/protobuf/any.proto";
+import "sf/firehose/v2/firehose.proto";
+import "sf/substreams/v1/clock.proto";
+import "sf/substreams/v1/modules.proto";
+
+option go_package = "github.com/streamingfast/substreams/pb/sf/substreams/rpc/v2;pbsubstreamsrpcv2";
+
+// Stream is the primary service for consuming Substreams data. It provides a real-time
+// and historical stream of blockchain blocks processed through Substreams modules.
+service Stream {
+  // Blocks streams processed blockchain data for the requested range, applying the specified
+  // Substreams modules. Responses include a one-time `SessionInit` message, optional progress
+  // updates during parallel processing, `BlockScopedData` messages for each processed block,
+  // `BlockUndoSignal` messages on chain reorganizations, and an `Error` fatal error notification.
+  //
+  // For reliable, exactly-once consumption, see `BlockScopedData.cursor` and
+  // `BlockUndoSignal.last_valid_cursor`: persisting and resuming from these cursors is the
+  // foundation of the "never miss a beat" guarantee.
+  rpc Blocks(Request) returns (stream Response);
+}
+
+// EndpointInfo provides metadata about the Substreams endpoint, including supported chains
+// and protocol capabilities.
+service EndpointInfo {
+  // Info returns metadata about the endpoint such as the supported chain(s) and which
+  // Substreams protocol versions are available.
+  rpc Info(sf.firehose.v2.InfoRequest) returns (sf.firehose.v2.InfoResponse);
+}
+
+// Request is the input message for the `Stream.Blocks` RPC. It specifies which blocks to
+// stream, which Substreams modules to execute, and various options that control the
+// execution mode and output.
+message Request {
+  // If positive, the absolute block number at which to start streaming (inclusive).
+  // If 0, streaming starts at the first streamable block of the chain.
+  // If negative, the start block is resolved relative to the chain HEAD at the time of
+  // the request (e.g., -10 starts 10 blocks before the current HEAD).
+  int64 start_block_num = 1;
+
+  // Cursor returned by a previous `BlockScopedData.cursor` or
+  // `BlockUndoSignal.last_valid_cursor`. When provided, streaming resumes from the exact
+  // position the cursor points to, taking precedence over `start_block_num`. Use this to
+  // implement reliable exactly-once resumption after disconnections or forks.
+  string start_cursor = 2;
+
+  // If non-zero, streaming stops *before* reaching this block number (exclusive upper bound).
+  // If zero, the stream continues indefinitely, following the chain HEAD in real-time.
+  uint64 stop_block_num = 3;
+
+  // With final_block_only, you only receive blocks that are irreversible:
+  // 'final_block_height' will be equal to current block and no 'undo_signal' will ever be sent
+  bool final_blocks_only = 4;
+
+  // Substreams has two mode when executing your module(s) either development mode or production
+  // mode. Development and production modes impact the execution of Substreams, important aspects
+  // of execution include:
+  // * The time required to reach the first byte.
+  // * The speed that large ranges get executed.
+  // * The module logs and outputs sent back to the client.
+  //
+  // By default, the engine runs in developer mode, with richer and deeper output. Differences
+  // between production and development modes include:
+  // * Forward parallel execution is enabled in production mode and disabled in development mode
+  // * The time required to reach the first byte in development mode is faster than in production mode.
+  //
+  // Specific attributes of development mode include:
+  // * The client will receive all of the executed module's logs.
+  // * It's possible to request specific store snapshots in the execution tree (via `debug_initial_store_snapshot_for_modules`).
+  // * Multiple module's output is possible.
+  //
+  // With production mode`, however, you trade off functionality for high speed enabling forward
+  // parallel execution of module ahead of time.
+  bool production_mode = 5;
+
+  // Name of the module whose output should be streamed back to the client. Must be a
+  // `map` module. Only one output module is supported per request.
+  string output_module = 6;
+
+  // Substreams module definitions to execute. At minimum this must contain the module
+  // named by `output_module` and all of its transitive dependencies.
+  sf.substreams.v1.Modules modules = 7;
+
+  // Available only in developer mode
+  repeated string debug_initial_store_snapshot_for_modules = 10;
+
+  // When true, prepares the stores and caches on the server without sending any module
+  // output. Only progress messages and minimal clock/cursor data are returned. Useful for
+  // pre-warming caches (e.g., to reduce latency for a subsequent real request) without
+  // incurring the cost of transmitting full block data.
+  bool noop_mode = 11;
+
+  // If set, the engine will reject a request if the number of blocks to process (including preparing the stores) is above this limit.
+  // Useful as a safeguard for managing costs
+  uint64 limit_processed_blocks = 12;
+
+  // Available only in developer mode
+  // If set, the server will only send the output of these modules.
+  // If unset, all the outputs are sent.
+  // This allows the user to reduce the payload in dev mode, while still getting some extra debugging information
+  repeated string dev_output_modules = 13;
+
+  // Progress_messages_interval_ms is the interval between progress messages, in milliseconds (minimum: 500, default: start at 500ms and ramp up to 5000ms within 1min)
+  uint64 progress_messages_interval_ms = 14;
+
+  // previously used in partial alpha tests
+  reserved 15;
+
+  // If true, blocks close to head will be sent in "partials" as soon as we get them.
+  // This means that you will get different versions of the same block number, each an incomplete increment
+  // Other blocks will be sent completely (older blocks, or blocks for which the provider did not get a partial in time)
+  bool partial_blocks = 16;
+}
+
+// Response is the output message streamed back by the `Stream.Blocks` RPC.
+// Each response contains exactly one of the possible message types.
+message Response {
+  oneof message {
+    // Always sent first when the stream opens.
+    SessionInit session = 1;
+    // Progress of data preparation, before sending in the stream of `data` events.
+    ModulesProgress progress = 2;
+    BlockScopedData block_scoped_data = 3;
+    BlockUndoSignal block_undo_signal = 4;
+    Error fatal_error = 5;
+
+    // Available only in developer mode, and only if `debug_initial_store_snapshot_for_modules` is set.
+    InitialSnapshotData debug_snapshot_data = 10;
+    // Available only in developer mode, and only if `debug_initial_store_snapshot_for_modules` is set.
+    InitialSnapshotComplete debug_snapshot_complete = 11;
+
+    // previously used in partial alpha tests = 12;
+  }
+}
+
+// BlockUndoSignal is sent when a chain reorganization (fork) has occurred, indicating that
+// some previously streamed block data is no longer part of the canonical chain and must be
+// invalidated. Upon receiving this signal, delete all stored data for blocks whose number
+// is strictly greater than `last_valid_block.number`, then resume the stream using
+// `last_valid_cursor`.
+//
+// A single BlockUndoSignal may revert multiple consecutive blocks. For example, suppose
+// your sink has processed blocks 100, 101, 102, and 103. If the chain reorganizes and the
+// new canonical chain diverges starting after block 98, you will receive a single
+// BlockUndoSignal with `last_valid_block.number = 98`. You must then delete all reversible
+// data you stored for blocks 99, 100, 101, 102, and 103.
+//
+// "Reversible" data refers to data stored for blocks whose number is greater than the
+// most recently received `BlockScopedData.final_block_height`. Once a block's number is
+// at or below `final_block_height`, that data is considered final (irreversible) and will
+// never be the subject of a future undo signal.
+//
+// Best practice: atomically delete reversible data AND persist `last_valid_cursor`
+// together in the same transaction. This guarantees that on reconnection (using the
+// persisted cursor), the stream resumes exactly at the last valid block, even if a
+// disconnection occurred in the middle of a fork resolution.
+message BlockUndoSignal {
+  // The highest block that is still valid in the canonical chain after the reorganization.
+  // Delete all stored data for blocks with a number strictly greater than this block's number.
+  sf.substreams.v1.BlockRef last_valid_block = 1;
+  // The cursor corresponding to `last_valid_block`. Persist this cursor atomically with
+  // your data deletions so that on reconnection the stream resumes from exactly this point.
+  string last_valid_cursor = 2;
+}
+
+// BlockScopedData contains the processed output for a single block and is the primary
+// data-bearing message in the stream.
+//
+// Cursor handling and resumption:
+// Persist `cursor` atomically together with your processed data (ideally in the same
+// transaction) after every block. On reconnection, pass the persisted cursor as
+// `Request.start_cursor` to resume the stream from exactly where you left off, with no
+// duplicates and no gaps — even if a disconnection happened mid-fork.
+//
+// If your storage backend does not support transactions, a practical alternative is:
+// on startup, delete all stored data for blocks whose number is >= the last persisted
+// block number before resuming. This removes any half-written data from a previous
+// interrupted run and ensures a clean state before the stream continues.
+message BlockScopedData {
+  // The output produced by the `output_module` for this block. The `map_output` field
+  // within contains the module's Protobuf-encoded result.
+  MapModuleOutput output = 1;
+  // Clock information for this block: its hash (`id`), height (`number`), and timestamp.
+  sf.substreams.v1.Clock clock = 2;
+  // Opaque cursor identifying the exact stream position at this block. Persist this
+  // value and pass it as `Request.start_cursor` to resume the stream after a
+  // disconnection. This cursor is safe to persist even when `final_block_height` has
+  // not yet reached this block's number.
+  string cursor = 3;
+
+  // The block number of the highest block that has reached finality (irreversibility) at
+  // the time this message was produced. Data for blocks at or below this number will
+  // never be undone and can be treated as permanent. Non-deterministic: may advance
+  // in larger steps as the chain progresses.
+  uint64 final_block_height = 4;
+
+  repeated MapModuleOutput debug_map_outputs = 10;
+  repeated StoreModuleOutput debug_store_outputs = 11;
+
+  // Signed attestation, enabling economic security as per GIP-0083. Signatures are
+  // done using the key specified by SessionInit::attestation_public_key.
+  string attestation = 12;
+
+  // true if this is a partial block, meaning that it contains only parts of the block data and that its hash will be replaced
+  bool is_partial = 13;
+
+  // Only present if is_partial==true
+  optional uint32 partial_index = 14;
+
+  // Only present if is_partial==true
+  // True if this is the last partial payload for this block number. The `clock.id` (block
+  // hash) carried in this message is the final, definitive hash for the block. Prior
+  // partials for the same block number will have had a tentative or empty hash.
+  //
+  // Partial block support is currently implemented for Flashblocks, the pre-confirmation
+  // block stream used on Base and Optimism. A single canonical block is typically split
+  // into multiple incremental partials; the last one carries the block's true hash.
+  optional bool is_last_partial = 15;
+}
+
+// SessionInit is the first message sent in the stream. It provides metadata about the
+// server-side execution session such as the resolved start block and parallelism settings.
+message SessionInit {
+  // Unique trace identifier for this stream session. Useful for correlating logs and
+  // debugging issues with the provider.
+  string trace_id = 1;
+  // The actual block number at which streaming will start, after resolving a relative
+  // `start_block_num` or a cursor. Use this to verify that the stream begins where expected.
+  uint64 resolved_start_block = 2;
+  // The block number at which the server transitions from parallel (historical) processing
+  // to linear (real-time) processing. Blocks before this number are produced by
+  // parallel workers; blocks at and after this number are produced sequentially.
+  uint64 linear_handoff_block = 3;
+  // The maximum number of parallel workers the server may use to process historical blocks
+  // for this request.
+  uint64 max_parallel_workers = 4;
+
+  // Operator's attestation public_key or address, enabling economic security as per GIP-0083.
+  string attestation_public_key = 5;
+
+  // The current HEAD block number of the chain at the time the session was initialized.
+  uint64 chain_head = 6;
+
+  // theoretical number of blocks that need to be processed __before any data is sent__, without consideration for current cached states
+  // Because of parallel work, 1000 blocks with 2 "store stages" will result in 2000 blocks to process
+  uint64 blocks_to_process_before_start_block = 7;
+
+  // same as `blocks_to_process_before_start_block`, but excluding the current cached states
+  uint64 effective_blocks_to_process_before_start_block = 8;
+
+  // theoretical number of blocks that will be processed inside the requested range, without consideration for current cached outputs
+  // if the range is open-ended, it is calculated up to the current chain head
+  // in production-mode, 1000 blocks with 3 "stages" will result in 3000 blocks to process
+  uint64 blocks_to_process_after_start_block = 9;
+
+  // same as `blocks_to_process_after_start_block`, but excluding the current cached outputs
+  uint64 effective_blocks_to_process_after_start_block = 10;
+}
+
+// InitialSnapshotComplete is sent in developer mode after all InitialSnapshotData
+// messages for a module have been delivered, signaling that the full initial store
+// snapshot has been transmitted.
+message InitialSnapshotComplete {
+  // The cursor at the point the snapshot was taken. Use this as `start_cursor` if you
+  // want to resume the stream from exactly after the snapshot.
+  string cursor = 1;
+}
+
+// InitialSnapshotData carries a batch of key-value deltas from a store module's initial
+// state snapshot. Only available in developer mode when
+// `debug_initial_store_snapshot_for_modules` is set.
+message InitialSnapshotData {
+  // Name of the store module whose initial snapshot is being sent.
+  string module_name = 1;
+  // A batch of store deltas representing part of the module's full key-value state.
+  repeated StoreDelta deltas = 2;
+  // The number of keys sent so far across all batches for this module.
+  uint64 sent_keys = 4;
+  // The total number of keys in the store module's full initial snapshot.
+  uint64 total_keys = 3;
+}
+
+// MapModuleOutput holds the Protobuf-encoded output of a single `map` module for a block.
+message MapModuleOutput {
+  // The name of the map module that produced this output.
+  string name = 1;
+  // The Protobuf-encoded output value. The concrete message type is determined by the
+  // module's `output.type` declaration in the Substreams manifest.
+  google.protobuf.Any map_output = 2;
+  // DebugOutputInfo is available in non-production mode only
+  OutputDebugInfo debug_info = 10;
+}
+
+// StoreModuleOutput are produced for store modules in development mode.
+// It is not possible to retrieve store models in production, with parallelization
+// enabled. If you need the deltas directly, write a pass through mapper module
+// that will get them down to you.
+message StoreModuleOutput {
+  string name = 1;
+  repeated StoreDelta debug_store_deltas = 2;
+  OutputDebugInfo debug_info = 10;
+}
+
+message OutputDebugInfo {
+  repeated string logs = 1;
+  // LogsTruncated is a flag that tells you if you received all the logs or if they
+  // were truncated because you logged too much (fixed limit currently is set to 128 KiB).
+  bool logs_truncated = 2;
+  bool cached = 3;
+}
+
+// ModulesProgress is a message that is sent every 500ms
+message ModulesProgress {
+  // previously: repeated ModuleProgress modules = 1;
+  // these previous `modules` messages were sent in bursts and are not sent anymore.
+  reserved 1;
+  // List of jobs running on tier2 servers
+  repeated Job running_jobs = 2;
+  // Execution statistics for each module
+  repeated ModuleStats modules_stats = 3;
+  // Stages definition and completed block ranges
+  repeated Stage stages = 4;
+
+  ProcessedBytes processed_bytes = 5;
+  uint64 processed_blocks = 6;
+}
+
+// ProcessedBytes reports the total volume of data read and written during parallel
+// processing. These are cumulative counters reset per session.
+message ProcessedBytes {
+  // Total number of bytes read from the block store during processing.
+  uint64 total_bytes_read = 1;
+  // Total number of bytes written to intermediate stores during processing.
+  uint64 total_bytes_written = 2;
+}
+
+// Error represents a fatal module execution error. When received, the stream will be
+// terminated by the server immediately after this message.
+message Error {
+  // The name of the module that caused the fatal error.
+  string module = 1;
+  // A human-readable description of why the module failed.
+  string reason = 2;
+  // Log lines emitted by the failing module up to the point of failure.
+  repeated string logs = 3;
+  // FailureLogsTruncated is a flag that tells you if you received all the logs or if they
+  // were truncated because you logged too much (fixed limit currently is set to 128 KiB).
+  bool logs_truncated = 4;
+}
+
+// Job represents a single parallel processing unit running on a tier2 worker. Jobs process
+// a contiguous block range for a specific execution stage.
+message Job {
+  // The index of the execution stage this job belongs to (0-based).
+  uint32 stage = 1;
+  // The first block number in the range processed by this job (inclusive).
+  uint64 start_block = 2;
+  // The last block number in the range processed by this job (exclusive).
+  uint64 stop_block = 3;
+  // The number of blocks processed so far by this job within its range.
+  uint64 progress_blocks = 4;
+  // The wall-clock time in milliseconds this job has been running.
+  uint64 duration_ms = 5;
+}
+
+// Stage represents one layer of the module execution DAG. Modules are grouped into stages
+// based on their dependencies; all modules in a stage can be executed independently of
+// each other but depend on modules in earlier stages.
+message Stage {
+  // The names of the modules that belong to this execution stage.
+  repeated string modules = 1;
+  // The block ranges that have been fully processed and cached for this stage.
+  repeated BlockRange completed_ranges = 2;
+}
+
+// ModuleStats gathers metrics and statistics from each module, running on tier1 or tier2
+// All the 'count' and 'time_ms' values may include duplicate for each stage going over that module
+message ModuleStats {
+  // name of the module
+  string name = 1;
+
+  // total_processed_blocks is the sum of blocks sent to that module code
+  uint64 total_processed_block_count = 2;
+  // total_processing_time_ms is the sum of all time spent running that module code
+  uint64 total_processing_time_ms = 3;
+
+  //// external_calls are chain-specific intrinsics, like "Ethereum RPC calls".
+  repeated ExternalCallMetric external_call_metrics = 4;
+
+  // total_store_operation_time_ms is the sum of all time spent running that module code waiting for a store operation (ex: read, write, delete...)
+  uint64 total_store_operation_time_ms = 5;
+  // total_store_read_count is the sum of all the store Read operations called from that module code
+  uint64 total_store_read_count = 6;
+
+  // total_store_write_count is the sum of all store Write operations called from that module code (store-only)
+  uint64 total_store_write_count = 10;
+
+  // total_store_deleteprefix_count is the sum of all store DeletePrefix operations called from that module code (store-only)
+  // note that DeletePrefix can be a costly operation on large stores
+  uint64 total_store_deleteprefix_count = 11;
+
+  // store_size_bytes is the uncompressed size of the full KV store for that module, from the last 'merge' operation (store-only)
+  uint64 store_size_bytes = 12;
+
+  // total_store_merging_time_ms is the time spent merging partial stores into a full KV store for that module (store-only)
+  uint64 total_store_merging_time_ms = 13;
+
+  // store_currently_merging is true if there is a merging operation (partial store to full KV store) on the way.
+  bool store_currently_merging = 14;
+
+  // highest_contiguous_block is the highest block in the highest merged full KV store of that module (store-only)
+  uint64 highest_contiguous_block = 15;
+}
+
+// ExternalCallMetric tracks usage of a chain-specific external call type (e.g., Ethereum
+// RPC calls) made by a module during processing.
+message ExternalCallMetric {
+  // The name identifying the type of external call (e.g., "eth_call").
+  string name = 1;
+  // The total number of external calls of this type made.
+  uint64 count = 2;
+  // The total wall-clock time in milliseconds spent waiting for external calls of this type.
+  uint64 time_ms = 3;
+}
+
+// StoreDelta represents a single key-value mutation in a `store` module's state for a
+// given block. Used in debug store output and initial snapshot data.
+message StoreDelta {
+  // Operation describes the type of mutation applied to the store key.
+  enum Operation {
+    UNSET = 0;
+    CREATE = 1;
+    UPDATE = 2;
+    DELETE = 3;
+  }
+  // The type of operation applied to this key.
+  Operation operation = 1;
+  // The ordinal within the block at which this mutation occurred. Ordinals are
+  // monotonically increasing within a block and allow ordering mutations within
+  // the same block.
+  uint64 ordinal = 2;
+  // The store key that was mutated.
+  string key = 3;
+  // The previous value of the key before this mutation (empty for CREATE operations).
+  bytes old_value = 4;
+  // The new value of the key after this mutation (empty for DELETE operations).
+  bytes new_value = 5;
+}
+
+// BlockRange represents a contiguous range of blocks [start_block, end_block).
+message BlockRange {
+  // The first block number in the range (inclusive).
+  uint64 start_block = 2;
+  // The last block number in the range (exclusive).
+  uint64 end_block = 3;
+}

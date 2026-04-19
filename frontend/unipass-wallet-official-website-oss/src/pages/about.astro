@@ -1,0 +1,12 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { COPY } from "../content";
+const c = COPY.en.about;
+---
+<BaseLayout title="About" locale="en">
+  <section style="padding: 4rem 0; max-width: 40rem;">
+    <h1>{c.headline}</h1>
+    <p>{c.body}</p>
+    <p><a href="/">← Back home</a></p>
+  </section>
+</BaseLayout>

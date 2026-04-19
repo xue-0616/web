@@ -1,0 +1,46 @@
+---
+import { NAV } from "../content";
+---
+<header class="site-header">
+  <a class="brand" href="/">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span class="brand-name">Solagram</span>
+  </a>
+  <nav aria-label="Primary">
+    {NAV.map((n) => <a href={n.href}>{n.label}</a>)}
+  </nav>
+  <a class="cta" href="https://t.me/solagram_bot">Open app</a>
+</header>
+
+<style>
+  .site-header {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; gap: var(--space-8);
+    padding: var(--space-4) var(--space-8);
+    backdrop-filter: blur(12px);
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+    border-bottom: 1px solid var(--border);
+  }
+  .brand {
+    display: flex; align-items: center; gap: var(--space-2);
+    color: var(--fg); font-weight: 700; font-size: var(--text-lg);
+  }
+  .brand-mark {
+    width: 24px; height: 24px; border-radius: 6px;
+    background: linear-gradient(135deg, var(--accent), #f472b6);
+    box-shadow: 0 0 18px var(--accent-ghost);
+  }
+  nav { display: flex; gap: var(--space-6); margin-left: auto; }
+  nav a { color: var(--fg-dim); font-size: var(--text-sm); font-weight: 500; }
+  nav a:hover { color: var(--fg); }
+  .cta {
+    padding: var(--space-2) var(--space-4);
+    background: var(--accent); color: var(--accent-fg);
+    border-radius: var(--radius-full);
+    font-size: var(--text-sm); font-weight: 600;
+  }
+  .cta:hover { background: var(--accent-hover); color: var(--accent-fg); }
+  @media (max-width: 640px) {
+    nav { display: none; }
+  }
+</style>

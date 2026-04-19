@@ -1,0 +1,6 @@
+/* Per-product accent override for blinks-miniapp-oss. Import AFTER tokens.css. */
+:root {
+  --accent:        #9945ff;
+  --accent-hover:  #a865ff;
+  --accent-ghost:  #9945ff22;
+}

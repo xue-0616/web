@@ -1,0 +1,28 @@
+// Recovered from dist/buried.point.name.js.map (source: ../../../src/shared/utils/buried.point.name.ts)
+
+export const sendEmailBuriedName = {
+    code: 'otp_code_email_send',
+    notify: 'feedback_notify_email_send',
+    verifyUrl: 'add_guardian_invitation_email_send',
+    policyRecoveryEmail: 'policy_recovery_email_send',
+    guardianRecoveryEmail: 'guardian_recovery_email_send',
+    syncAccount: 'sync_wallet_email_send',
+    accountInfo: 'account_status',
+};
+export const getEmailBuriedName = {
+    emailParsingError: 'email_verify_failed:email_resolve_failed',
+    subjectNotFind: 'email_verify_failed:email_subject_not_find',
+    emailDkimParamsParsingError: 'email_verify_failed:email_dkim_verify_failed',
+    recoverySubjectNotMatchEmail: 'recovery_email_verify_failed:email_subject_mismatch',
+    recoveryKeysetHashNotMatch: 'recovery_email_verify_failed:recovery_keyset_hash_mismatch',
+    recoveryKeysetHashNotFind: 'recovery_email_verify_failed:recovery_keyset_hash__mismatch',
+    recoveryEmailNotMatch: 'recovery_email_verify_failed:email_address_mismatch',
+    guardianRecoveryEmailSuccess: 'guardian_recovery_email_verify_success',
+    policyRecoveryEmailSuccess: 'policy_recovery_email_verify_success',
+    syncSubjectNotMatch: 'sync_wallet_email_verify_failed:email_subject_mismatch',
+    syncMetaNonceNotFind: 'sync_wallet_email_verify_failed:meta_nonce_not_find',
+    syncMetaNonceNotMatch: 'sync_wallet_email_verify_failed:meta_nonce_mismatch',
+    syncEmailNotMatch: 'sync_wallet_email_verify_failed:email_address_mismatch',
+    syncEmailSuccess: 'sync_wallet_email_verify_success',
+    addGuardianEmail: 'add_guardian_invitation_email_success',
+};

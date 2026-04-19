@@ -1,0 +1,4 @@
+upstream: UniPass-Wallet-JS
+local: ../../upstream/UniPass-Wallet-JS
+subpath: 14 个 packages/* SDK
+builder: pnpm-monorepo

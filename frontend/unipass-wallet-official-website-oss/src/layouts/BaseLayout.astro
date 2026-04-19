@@ -1,0 +1,74 @@
+---
+/**
+ * Base layout shared by every marketing page.
+ * Locale is derived from the URL prefix (`/` → en, `/zh/` → zh-CN)
+ * which keeps the site fully statically generated.
+ */
+export interface Props {
+  title: string;
+  description?: string;
+  locale?: "en" | "zh-CN";
+}
+const { title, description, locale = "en" } = Astro.props;
+const siteName = "UniPass Wallet";
+---
+<!doctype html>
+<html lang={locale}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title} · {siteName}</title>
+    <meta name="description" content={description ?? "The email-native self-custody wallet."} />
+    <meta property="og:title" content={`${title} · ${siteName}`} />
+    <meta property="og:type" content="website" />
+    <link rel="icon" href="/favicon.svg" />
+    <style>
+      @import "../design/tokens.css";
+      /* Aliases mapping legacy token names to the shared set so existing
+         `var(--accent)` calls keep working while we migrate. */
+      :root { --accent: var(--brand); --accent-hover: var(--brand-hover); --card: var(--surface); }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        line-height: 1.6;
+      }
+      header, main, footer { max-width: 72rem; margin: 0 auto; padding: 1rem 2rem; }
+      nav { display: flex; gap: 1.5rem; align-items: center; }
+      nav a { color: var(--fg); text-decoration: none; font-weight: 500; }
+      nav a:hover, nav a:focus { color: var(--accent); }
+      .brand { font-weight: 700; font-size: 1.25rem; margin-right: auto; }
+      .btn {
+        display: inline-block;
+        padding: 0.75rem 1.5rem;
+        background: var(--accent);
+        color: white;
+        border-radius: 0.5rem;
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .btn:hover { background: var(--accent-hover); }
+      footer { color: var(--muted); border-top: 1px solid var(--border); margin-top: 4rem; padding-top: 2rem; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <nav>
+        <a class="brand" href={locale === "zh-CN" ? "/zh/" : "/"}>{siteName}</a>
+        <a href={locale === "zh-CN" ? "/zh/" : "/"}>{locale === "zh-CN" ? "首页" : "Home"}</a>
+        <a href={locale === "zh-CN" ? "/zh/download" : "/download"}>{locale === "zh-CN" ? "下载" : "Download"}</a>
+        <a href={locale === "zh-CN" ? "/zh/about" : "/about"}>{locale === "zh-CN" ? "关于" : "About"}</a>
+        <a href={locale === "zh-CN" ? "/" : "/zh/"} aria-label="Switch language">
+          {locale === "zh-CN" ? "EN" : "中文"}
+        </a>
+      </nav>
+    </header>
+    <main>
+      <slot />
+    </main>
+    <footer>
+      <p>© {new Date().getFullYear()} UniPass Wallet. {locale === "zh-CN" ? "保留所有权利" : "All rights reserved"}.</p>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,67 @@
+[workspace]
+members = [
+    "crates/api",
+    "crates/api-common",
+    "crates/entity",
+    "crates/intent-solver",
+    "crates/types",
+    "crates/utils",
+    "crates/migration",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
+actix-web = "4"
+actix-cors = "0.7"
+sea-orm = { version = "0.12.15", features = ["sqlx-mysql", "runtime-tokio-rustls", "macros"] }
+sea-orm-migration = "0.12.15"
+deadpool-redis = "0.18"
+redis = { version = "0.27", features = ["tokio-comp"] }
+k256 = { version = "0.13", features = ["ecdsa"] }
+sha2 = "0.10"
+reqwest = { version = "0.11", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-actix-web = "0.7"
+anyhow = "1"
+thiserror = "1"
+hex = "0.4"
+rust_decimal = { version = "1", features = ["serde-with-str"] }
+envy = "0.4"
+ckb-jsonrpc-types = "0.116"
+ckb-types = "0.116"
+molecule = "0.7"
+num-bigint = "0.4"
+
+[package]
+name = "utxoswap-farm-sequencer"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+actix-web.workspace = true
+actix-cors.workspace = true
+sea-orm.workspace = true
+sea-orm-migration.workspace = true
+deadpool-redis.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-actix-web.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+envy.workspace = true
+anyhow.workspace = true
+
+api = { path = "crates/api" }
+api-common = { path = "crates/api-common" }
+entity = { path = "crates/entity" }
+utils = { path = "crates/utils" }
+migration = { path = "crates/migration" }

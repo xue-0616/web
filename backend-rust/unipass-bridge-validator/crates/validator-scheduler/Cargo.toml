@@ -1,0 +1,12 @@
+[package]
+name = "validator-scheduler"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+api = { path = "../api" }
+validator-daos = { path = "../validator-daos" }
+validator-monitor = { path = "../validator-monitor" }

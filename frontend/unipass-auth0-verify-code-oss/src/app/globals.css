@@ -1,0 +1,57 @@
+:root {
+  --bg: #f7f8fb;
+  --fg: #111;
+  --muted: #6b7280;
+  --primary: #6d28d9;
+  --primary-hover: #5b21b6;
+  --danger: #dc2626;
+  --card-bg: #ffffff;
+  --card-border: #e5e7eb;
+  --focus-ring: #8b5cf6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0b10;
+    --fg: #f3f4f6;
+    --muted: #9ca3af;
+    --primary: #8b5cf6;
+    --primary-hover: #a78bfa;
+    --danger: #f87171;
+    --card-bg: #141418;
+    --card-border: #262631;
+  }
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+input {
+  background: var(--card-bg);
+  color: var(--fg);
+  border: 1px solid var(--card-border);
+}
+
+input:focus, button:focus {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  font-weight: 600;
+  transition: background 120ms ease;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}

@@ -1,0 +1,37 @@
+{
+  "_comment": "Dev-mode snap-service config. Presumes MySQL+Redis as per docker-compose.dev.yml.",
+  "bind": "0.0.0.0",
+  "port": 8080,
+  "mysql": {
+    "host": "mysql",
+    "port": 3306,
+    "user": "unipass",
+    "password": "dev_pass",
+    "database": "unipass",
+    "max_connections": 10
+  },
+  "redis": {
+    "host": "redis",
+    "port": 6379,
+    "db": 0,
+    "pool_max_size": 16
+  },
+  "jwt": {
+    "hs256_secret": "0202020202020202020202020202020202020202020202020202020202020202",
+    "token_ttl_secs": 604800,
+    "issuer": "unipass-snap-dev"
+  },
+  "relayer": {
+    "base_url": "http://relayer.invalid",
+    "timeout_secs": 30,
+    "max_retries": 3
+  },
+  "free_quota_signer": {
+    "signer_private_key": "0x0303030303030303030303030303030303030303030303030303030303030303",
+    "contract_addresses": {
+      "1": "0x0000000000000000000000000000000000000001",
+      "11155111": "0x0000000000000000000000000000000000000002"
+    }
+  },
+  "log_json": false
+}

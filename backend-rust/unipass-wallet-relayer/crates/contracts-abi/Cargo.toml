@@ -1,0 +1,8 @@
+[package]
+name = "contracts-abi"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+ethers.workspace = true
+ethers-contract.workspace = true
+serde.workspace = true

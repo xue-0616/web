@@ -1,0 +1,3 @@
+[workspace]
+members = ['trading-tracker']
+resolver = "2"

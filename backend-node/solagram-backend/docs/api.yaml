@@ -1,0 +1,1032 @@
+openapi: 3.0.0
+paths:
+  /solagram/health:
+    get:
+      operationId: HealthCheckerController_check
+      parameters: []
+      responses:
+        '200':
+          description: The Health Check is successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  info:
+                    type: object
+                    example: &ref_0
+                      database: &ref_1
+                        status: up
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+                    nullable: true
+                  error:
+                    type: object
+                    example: {}
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+                    nullable: true
+                  details:
+                    type: object
+                    example: *ref_0
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+        '503':
+          description: The Health Check is not successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: error
+                  info:
+                    type: object
+                    example: *ref_0
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+                    nullable: true
+                  error:
+                    type: object
+                    example:
+                      redis: &ref_2
+                        status: down
+                        message: Could not connect
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+                    nullable: true
+                  details:
+                    type: object
+                    example:
+                      database: *ref_1
+                      redis: *ref_2
+                    additionalProperties:
+                      type: object
+                      required:
+                        - status
+                      properties:
+                        status:
+                          type: string
+                      additionalProperties: true
+  /solagram/api/v1/blink/{shortCode}:
+    get:
+      operationId: BlinkController_getUrlByShortCode
+      summary: Retrieve URL by short code
+      parameters: []
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/SwaggerBaseApiResponseFor class
+                  BlinkShortCodeOutputDto {
+
+                  } 
+      tags: &ref_3
+        - blink
+  /solagram/api/v1/blink/shortcode/query:
+    post:
+      operationId: BlinkController_getShortCode
+      summary: Query Short Code
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryShortCodeInput'
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/SwaggerBaseApiResponseFor class
+                  QueryShortCodeOutput {
+
+                  } 
+      tags: *ref_3
+  /solagram/bot/wallet/webhook:
+    post:
+      operationId: WebhookController_handleWebhook
+      parameters:
+        - name: x-telegram-bot-api-secret-token
+          required: true
+          in: header
+          schema:
+            type: string
+      responses:
+        '201':
+          description: ''
+      tags:
+        - bot
+  /solagram/api/v1/user/auth:
+    post:
+      operationId: TgUserController_auth
+      summary: Wallet App Login
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginInputDto'
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/SwaggerBaseApiResponseFor class
+                  LoginOutputDto {
+
+                  } 
+      tags: &ref_4
+        - User
+  /solagram/api/v1/user/upload/key:
+    post:
+      operationId: TgUserController_uploadEncryptedKey
+      summary: Upload Encrypted Key
+      description: This endpoint requires a valid JWT token for authentication.
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveEncryptedKeyInputDto'
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SwaggerBaseApiResponseFor undefined '
+      tags: *ref_4
+      security:
+        - bearer: []
+  /solagram/api/v1/app/action:
+    post:
+      operationId: MiniAppController_recordMiniAppAction
+      summary: record mini app action
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MiniAppActionInputDto'
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SwaggerBaseApiResponseFor undefined '
+      tags:
+        - app
+  /solagram/api/v1/wallet/message:
+    get:
+      operationId: WalletController_connect
+      summary: cache wallet message
+      parameters:
+        - name: encryption_public_key
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: nonce
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: data
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: errorCode
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: errorMessage
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SwaggerBaseApiResponseFor undefined '
+      tags: &ref_5
+        - wallet
+  /solagram/api/v1/wallet/solana:
+    post:
+      operationId: WalletController_forwardingSolanaApi
+      summary: Forwarding SolanaaAPI
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForwardingApiInputDto'
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/SwaggerBaseApiResponseFor function
+                  String() { [native code] } 
+      tags: *ref_5
+  /solagram/api/v1/app/phantom/connect/{hash}:
+    get:
+      operationId: AppController_connect
+      summary: phantom connect redirect link
+      description: This api is deprecated.Use app/wallet/connect/:hash instead.
+      parameters:
+        - name: phantom_encryption_public_key
+          required: false
+          in: query
+          description: >-
+            https://docs.phantom.app/phantom-deeplinks/provider-methods/connect#approve
+          schema:
+            type: string
+        - name: nonce
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: data
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: errorCode
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: errorMessage
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        '301':
+          description: Redirects to tg bot
+      tags: &ref_6
+        - app
+  /solagram/api/v1/app/wallet/connect/{hash}:
+    get:
+      operationId: AppController_walletConnect
+      summary: wallet connect redirect link
+      parameters:
+        - name: phantom_encryption_public_key
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: solflare_encryption_public_key
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: wallet_encryption_public_key
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: nonce
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: data
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: errorCode
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: errorMessage
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        '301':
+          description: Redirects to tg bot
+      tags: *ref_6
+  /solagram/api/v1/app/phantom/sign/{hash}:
+    get:
+      operationId: AppController_signMessage
+      summary: phantom sign message redirect link
+      parameters:
+        - name: nonce
+          required: false
+          in: query
+          description: >-
+            https://docs.phantom.app/phantom-deeplinks/provider-methods/signmessage#approve
+          schema:
+            type: string
+        - name: data
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: errorCode
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: errorMessage
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        '301':
+          description: Redirects to tg bot
+      tags: *ref_6
+  /solagram/api/v1/app/query:
+    get:
+      operationId: AppController_queryData
+      summary: query cache message
+      parameters:
+        - name: key
+          required: true
+          in: query
+          description: hash or nonce
+          schema:
+            type: string
+        - name: walletType
+          required: true
+          in: query
+          description: app type enum,0:Wallet,1:Phantom
+          example: 1
+          schema:
+            enum:
+              - 0
+              - 1
+            type: number
+        - name: messageType
+          required: false
+          in: query
+          description: app type enum,0:Message,1:txRawData
+          example: 1
+          schema:
+            enum:
+              - 0
+              - 1
+            type: number
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/SwaggerBaseApiResponseFor class
+                  AppQueryOutputDto {
+
+                  } 
+      tags: *ref_6
+  /solagram/api/v1/app/tx:
+    post:
+      operationId: AppController_txRawData
+      summary: save tx raw data
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TxRawDataInputDto'
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SwaggerBaseApiResponseFor undefined '
+      tags: *ref_6
+  /solagram/api/v1/solana/token:
+    post:
+      operationId: SolanaController_getTokenInfo
+      summary: Get Token Info
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShowTokenInfoInputDto'
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/SwaggerBaseApiResponseFor class
+                  TokenInfoOutput {
+
+                  } 
+      tags: &ref_7
+        - Solana
+  /solagram/api/v1/solana/transfers:
+    get:
+      operationId: SolanaController_getAddressTransfers
+      summary: Get Address Transfers
+      parameters:
+        - name: address
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: mint
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: page
+          required: true
+          in: query
+          schema:
+            type: number
+      responses:
+        default:
+          description: ''
+          content:
+            application/json:
+              schema:
+                $ref: >-
+                  #/components/schemas/SwaggerBaseApiResponseFor class
+                  AddressTransfersOutput {
+
+                  } 
+      tags: *ref_7
+  /solagram/api/v1/bot/notify:
+    post:
+      operationId: NotifyController_notify
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BotNotifyInputDto'
+      responses:
+        '201':
+          description: ''
+      tags:
+        - bot
+info:
+  title: Solagram API
+  description: Solagram API description
+  version: '1.0'
+  contact: {}
+tags: []
+servers: []
+components:
+  schemas:
+    BlinkShortCodeOutputDto:
+      type: object
+      properties:
+        url:
+          type: string
+          description: blink url
+      required:
+        - url
+    "SwaggerBaseApiResponseFor class BlinkShortCodeOutputDto {\n} ":
+      type: object
+      properties:
+        code:
+          type: number
+          description: |-
+            200:success;
+             4000:parameter exception,
+             4001: auth hash error 
+             4002: message not find.
+             
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/BlinkShortCodeOutputDto'
+      required:
+        - code
+        - message
+        - data
+    BlinkInfo:
+      type: object
+      properties:
+        blink:
+          type: string
+          description: blink list
+        id:
+          type: number
+      required:
+        - blink
+    QueryShortCodeInput:
+      type: object
+      properties:
+        blinks:
+          description: blink list
+          type: array
+          items:
+            $ref: '#/components/schemas/BlinkInfo'
+        domain:
+          type: string
+      required:
+        - blinks
+        - domain
+    QueryShortCodeOutput:
+      type: object
+      properties:
+        blink:
+          type: string
+        shortCode:
+          type: string
+        id:
+          type: number
+      required:
+        - blink
+        - shortCode
+    "SwaggerBaseApiResponseFor class QueryShortCodeOutput {\n} ":
+      type: object
+      properties:
+        code:
+          type: number
+          description: |-
+            200:success;
+             4000:parameter exception,
+             4001: auth hash error 
+             4002: message not find.
+             
+        message:
+          type: string
+        data:
+          description: null
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryShortCodeOutput'
+      required:
+        - code
+        - message
+        - data
+    UserInfo:
+      type: object
+      properties:
+        id:
+          type: number
+        first_name:
+          type: string
+        last_name:
+          type: string
+        username:
+          type: string
+        language_code:
+          type: string
+        added_to_attachment_menu:
+          type: boolean
+        allows_write_to_pm:
+          type: boolean
+        photo_url:
+          type: string
+      required:
+        - id
+        - first_name
+        - last_name
+        - username
+        - language_code
+    LoginInputDto:
+      type: object
+      properties:
+        user:
+          description: WebApp.initDataUnsafe.user
+          allOf:
+            - $ref: '#/components/schemas/UserInfo'
+        auth_date:
+          type: string
+          description: WebApp.initDataUnsafe.auth_date
+        hash:
+          type: string
+          description: WebApp.initDataUnsafe.hash
+        query_id:
+          type: string
+          description: WebApp.initDataUnsafe.query_id
+        chat_instance:
+          type: string
+        chat_type:
+          type: string
+        start_param:
+          type: string
+        can_send_after:
+          type: number
+        chat:
+          type: object
+        receiver:
+          $ref: '#/components/schemas/UserInfo'
+      required:
+        - user
+        - auth_date
+        - hash
+    CognitoResult:
+      type: object
+      properties:
+        region:
+          type: string
+        identity_pool_id:
+          type: string
+        user_pool_id:
+          type: string
+        kms_key_id:
+          type: string
+        id_token:
+          type: string
+      required:
+        - region
+        - identity_pool_id
+        - user_pool_id
+        - kms_key_id
+        - id_token
+    LoginOutputDto:
+      type: object
+      properties:
+        jwt:
+          type: string
+        key_encrypted:
+          type: string
+          description: The encrypted mnemonic phrase
+        cognito_result:
+          description: aws cognito config
+          allOf:
+            - $ref: '#/components/schemas/CognitoResult'
+      required:
+        - jwt
+    "SwaggerBaseApiResponseFor class LoginOutputDto {\n} ":
+      type: object
+      properties:
+        code:
+          type: number
+          description: |-
+            200:success;
+             4000:parameter exception,
+             4001: auth hash error 
+             4002: message not find.
+             
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/LoginOutputDto'
+      required:
+        - code
+        - message
+        - data
+    SaveEncryptedKeyInputDto:
+      type: object
+      properties:
+        key_encrypted:
+          type: string
+        address:
+          type: string
+      required:
+        - key_encrypted
+        - address
+    'SwaggerBaseApiResponseFor undefined ':
+      type: object
+      properties:
+        code:
+          type: number
+          description: |-
+            200:success;
+             4000:parameter exception,
+             4001: auth hash error 
+             4002: message not find.
+             
+        message:
+          type: string
+        data:
+          type: object
+      required:
+        - code
+        - message
+        - data
+    MiniAppActionInputDto:
+      type: object
+      properties:
+        short_code:
+          type: string
+          description: short_code is a parameter in startapp
+        chat_id:
+          type: string
+          description: chat_id is a parameter in startapp
+        user_id:
+          type: number
+          description: Telegram.WebApp.initDataUnsafe
+        source:
+          type: number
+          enum:
+            - 0
+            - 1
+          description: 'mini app open source : 0 - bot, 1 - blink mini app'
+          example: 0
+        app_type:
+          type: number
+          enum:
+            - 0
+            - 1
+          description: mini app open type:0- BlinkMiniApp, 1 - WalletMiniAPp
+          example: 0
+        action:
+          type: number
+          enum:
+            - 0
+            - 1
+            - 2
+          description: 'mini app open action: 0:Show home,1:Connect,2:SignTransaction,'
+          example: 0
+        publicKey:
+          type: string
+          description: tg user solana address
+      required:
+        - user_id
+        - source
+        - app_type
+        - action
+    ForwardingApiInputDto:
+      type: object
+      properties:
+        method:
+          type: number
+          enum:
+            - 0
+            - 1
+          description: 'API method: 0 - POST, 1 - GET'
+          example: 0
+        path:
+          type: number
+          enum: []
+          description: url patch
+          example: /auth/message
+        body:
+          type: number
+          enum: []
+          description: api request json string
+      required:
+        - method
+        - path
+        - body
+    'SwaggerBaseApiResponseFor function String() { [native code] } ':
+      type: object
+      properties:
+        code:
+          type: number
+          description: |-
+            200:success;
+             4000:parameter exception,
+             4001: auth hash error 
+             4002: message not find.
+             
+        message:
+          type: string
+        data:
+          type: string
+      required:
+        - code
+        - message
+        - data
+    AppQueryOutputDto:
+      type: object
+      properties:
+        public_key:
+          type: string
+        data:
+          type: string
+        nonce:
+          type: string
+        method:
+          type: string
+        error_message:
+          type: string
+        error_code:
+          type: string
+        domain:
+          type: string
+    "SwaggerBaseApiResponseFor class AppQueryOutputDto {\n} ":
+      type: object
+      properties:
+        code:
+          type: number
+          description: |-
+            200:success;
+             4000:parameter exception,
+             4001: auth hash error 
+             4002: message not find.
+             
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/AppQueryOutputDto'
+      required:
+        - code
+        - message
+        - data
+    TxRawDataInputDto:
+      type: object
+      properties:
+        method:
+          type: string
+        nonce:
+          type: string
+        data:
+          type: string
+      required:
+        - method
+        - nonce
+    ShowTokenInfoInputDto:
+      type: object
+      properties:
+        addresses:
+          description: token address
+          type: array
+          items:
+            type: string
+      required:
+        - addresses
+    TokenInfoOutput:
+      type: object
+      properties: {}
+    "SwaggerBaseApiResponseFor class TokenInfoOutput {\n} ":
+      type: object
+      properties:
+        code:
+          type: number
+          description: |-
+            200:success;
+             4000:parameter exception,
+             4001: auth hash error 
+             4002: message not find.
+             
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/TokenInfoOutput'
+      required:
+        - code
+        - message
+        - data
+    TransfersData:
+      type: object
+      properties:
+        instructionIndex:
+          type: number
+        innerInstructionIndex:
+          type: number
+        action:
+          type: string
+        status:
+          type: string
+        source:
+          type: string
+        sourceAssociation:
+          type: string
+        destination:
+          type: string
+        destinationAssociation:
+          type: string
+        token:
+          type: string
+        amount:
+          type: number
+        timestamp:
+          type: number
+      required:
+        - instructionIndex
+        - innerInstructionIndex
+        - action
+        - status
+        - source
+        - token
+        - amount
+        - timestamp
+    TransfersInfo:
+      type: object
+      properties:
+        transactionHash:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransfersData'
+      required:
+        - transactionHash
+        - data
+    Pagination:
+      type: object
+      properties:
+        currentPage:
+          type: number
+        totalPages:
+          type: number
+      required:
+        - currentPage
+        - totalPages
+    AddressTransfersOutput:
+      type: object
+      properties:
+        message:
+          type: string
+        status:
+          type: string
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransfersInfo'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      required:
+        - message
+        - status
+        - results
+        - pagination
+    "SwaggerBaseApiResponseFor class AddressTransfersOutput {\n} ":
+      type: object
+      properties:
+        code:
+          type: number
+          description: |-
+            200:success;
+             4000:parameter exception,
+             4001: auth hash error 
+             4002: message not find.
+             
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/AddressTransfersOutput'
+      required:
+        - code
+        - message
+        - data
+    BotNotifyInputDto:
+      type: object
+      properties:
+        source:
+          type: string
+        address:
+          type: string
+        message:
+          type: string
+      required:
+        - source
+        - address
+        - message

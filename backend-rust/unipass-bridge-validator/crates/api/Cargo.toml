@@ -1,0 +1,11 @@
+[package]
+name = "api"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+sea-orm.workspace = true
+deadpool-redis.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+configs = { path = "../configs" }
+validator-signer = { path = "../validator-signer" }

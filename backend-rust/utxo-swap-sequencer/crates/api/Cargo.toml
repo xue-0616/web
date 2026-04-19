@@ -1,0 +1,31 @@
+[package]
+name = "api"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+actix-web.workspace = true
+sea-orm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+hex.workspace = true
+rust_decimal.workspace = true
+jsonwebtoken.workspace = true
+reqwest.workspace = true
+utoipa.workspace = true
+utoipa-redoc.workspace = true
+redis.workspace = true
+deadpool-redis.workspace = true
+
+k256 = { version = "0.13", features = ["ecdsa"] }
+p256 = { version = "0.13", features = ["ecdsa"] }
+blake2b-rs.workspace = true
+
+api-common = { path = "../api-common" }
+entity_crate = { package = "entity", path = "../entity" }
+types = { path = "../types" }
+utils = { path = "../utils" }

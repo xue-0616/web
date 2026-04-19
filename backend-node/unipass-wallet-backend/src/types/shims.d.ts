@@ -1,0 +1,9 @@
+declare module 'lodash';
+declare module 'js-yaml';
+declare module 'uuid';
+declare module 'node-apollo';
+declare module 'querystringify';
+declare module 'node-rsa';
+declare module 'speakeasy';
+declare module 'mailparser';
+declare module 'qrcode';

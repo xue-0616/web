@@ -1,0 +1,85 @@
+name: Docker Build
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}
+
+jobs:
+  build-node:
+    name: "Node/${{ matrix.app }}"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { app: dexauto-server,            start: "node dist/src/main" }
+          - { app: huehub-dex-backend,        start: "node dist/main" }
+          - { app: huehub-dex-dobs-backend,   start: "node dist/main" }
+          - { app: mystery-bomb-box-backend,  start: "node dist/src/main" }
+          - { app: opentg-backend,            start: "node dist/main" }
+          - { app: solagram-backend,          start: "node dist/src/main" }
+          - { app: unipass-activity-backend,  start: "node dist/main.js" }
+          - { app: unipass-cms-backend,       start: "node dist/main.js" }
+          - { app: unipass-wallet-backend,    start: "node dist/main.js" }
+          - { app: unipass-wallet-custom,     start: "node dist/main.js" }
+          - { app: unipass-wallet-extend,     start: "node dist/main" }
+          - { app: unipass-wallet-oauth,      start: "node dist/main.js" }
+          - { app: utxoswap-paymaster-backend, start: "node dist/main" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: backend-node/${{ matrix.app }}
+          file: docker/node.Dockerfile
+          build-args: |
+            START_CMD=${{ matrix.start }}
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.app }}:${{ github.sha }}
+
+  build-rust:
+    name: "Rust/${{ matrix.app }}"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { app: dexauto-trading-server }
+          - { app: huehub-token-distributor }
+          - { app: payment-server }
+          - { app: tss-ecdsa-server }
+          - { app: unipass-bridge-validator }
+          - { app: unipass-wallet-relayer }
+          - { app: utxoswap-farm-sequencer }
+          - { app: utxo-swap-sequencer }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v5
+        with:
+          context: backend-rust/${{ matrix.app }}
+          file: docker/rust.Dockerfile
+          build-args: |
+            BIN_NAME=${{ matrix.app }}
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.app }}:${{ github.sha }}

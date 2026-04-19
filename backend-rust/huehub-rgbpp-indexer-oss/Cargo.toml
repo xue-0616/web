@@ -1,0 +1,37 @@
+[package]
+name = "huehub-rgbpp-indexer-oss"
+version = "0.1.0"
+edition = "2021"
+description = "Open-source rewrite of the closed-source `huehub-rgbpp-indexer` / `rgbpp` ELF — RGB++ on-chain indexer over BTC + CKB with a jsonrpsee JSON-RPC façade."
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "rgbpp-indexer"
+path = "src/main.rs"
+
+[dependencies]
+tokio      = { version = "1", features = ["macros", "rt-multi-thread", "time", "signal", "sync", "fs"] }
+anyhow     = "1"
+thiserror  = "1"
+async-trait = "0.1"
+redb       = "2"
+
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+hex        = { version = "0.4", features = ["serde"] }
+
+# JSON-RPC server (recovered: `jsonrpc_core` internals in ELF)
+jsonrpsee = { version = "0.24", features = ["server", "macros"] }
+
+tracing             = "0.1"
+tracing-subscriber  = { version = "0.3", features = ["env-filter", "json"] }
+dotenvy             = "0.15"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto           = true
+opt-level     = 3
+strip         = "debuginfo"
+codegen-units = 1

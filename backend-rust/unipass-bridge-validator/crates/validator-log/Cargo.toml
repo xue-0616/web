@@ -1,0 +1,10 @@
+[package]
+name = "validator-log"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+tracing.workspace = true
+reqwest.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tokio.workspace = true

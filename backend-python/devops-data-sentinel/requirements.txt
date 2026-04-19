@@ -1,0 +1,6 @@
+cryptography
+peewee
+pyyaml
+pymysql
+requests
+python-json-logger

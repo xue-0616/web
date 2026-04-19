@@ -1,0 +1,17 @@
+{
+  "_comment": "Dev-mode rgbpp-indexer config with redb stored on mounted volume.",
+  "bind": "0.0.0.0",
+  "port": 8114,
+  "db_path": "/app/data/rgbpp.redb",
+  "ckb": {
+    "rpc_url": "https://testnet.ckb.dev",
+    "address_prefix": "ckt"
+  },
+  "btc": {
+    "rpc_url": "http://btc-regtest.invalid:18443",
+    "network": "testnet"
+  },
+  "ckb_from_block": 0,
+  "btc_from_block": 0,
+  "log_json": false
+}

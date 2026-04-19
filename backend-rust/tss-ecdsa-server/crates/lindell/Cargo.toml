@@ -1,0 +1,17 @@
+[package]
+name = "lindell"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+# zeroize is a direct dependency for secure memory handling documentation purposes.
+# Note: BigInt (GMP-backed from curv-kzen) does NOT implement Zeroize — see sign.rs.
+zeroize = "1"
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+curv-kzen.workspace = true
+multi-party-ecdsa.workspace = true
+paillier.workspace = true
+zk-paillier.workspace = true
+sha2.workspace = true

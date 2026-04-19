@@ -1,0 +1,17 @@
+[package]
+name = "common"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+jsonwebtoken.workspace = true
+hmac.workspace = true
+sha2.workspace = true
+hex.workspace = true
+chrono.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+sea-orm.workspace = true
+deadpool-redis.workspace = true
+config = { path = "../config" }

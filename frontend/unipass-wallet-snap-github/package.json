@@ -1,0 +1,20 @@
+{
+  "name": "unipass-wallet-snap",
+  "version": "0.0.3",
+  "description": "An example for UniPass Wallet integrated with Metamask snaps.",
+  "scripts": {
+    "start:dev": "concurrently  --raw --kill-others \"yarn workspace @unipasswallet/smart-wallet-snap run start\" \"yarn workspace up-frontend run start:testnet\"",
+    "build": "yarn workspace up-frontend run build:testnet"
+  },
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "keywords": [],
+  "author": "johnz@lay2.dev",
+  "license": "Apache 2.0",
+  "dependencies": {
+    "@metamask/key-tree": "^10.1.1",
+    "concurrently": "^7.3.0"
+  }
+}

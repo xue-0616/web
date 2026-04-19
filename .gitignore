@@ -1,0 +1,80 @@
+
+# Upstream reference clones (see upstream/SOURCES.md)
+upstream/*/
+!upstream/_*.sh
+!upstream/_*.txt
+!upstream/_*.tsv
+!upstream/_*.py
+!upstream/SOURCES.md
+!upstream/_reconstructed/
+upstream/_reconstructed/*/target/
+!upstream/_reconstructed/**/*.rs
+!upstream/_reconstructed/**/Cargo.toml
+!upstream/_reconstructed/**/*.md
+
+# Runtime snapshot of closed-source artefacts (regenerable from backend-bin/ and frontend/*-src/)
+_snapshot/
+snapshot-*.tar.gz
+
+# --- 真实凭据绝不入库 ---
+# `.env` alone doesn't catch `dev.env` / `prod.env` / `.prod.env`, so
+# we also exclude `*.env` wholesale and whitelist the documented
+# template variants.
+.env
+.env.*
+*.env
+!.env.example
+!*.env.example
+!.env.sample
+!.env.template
+*.secret
+*.key
+!*.pub.key
+
+# --- 本次会话的临时清单（含真实 key，必须排除）---
+APPLY_LIST.md
+PRODUCTION_CREDENTIALS.md
+
+# --- 反编译二进制（3.4 GB，仅作本地参考）---
+backend-bin/
+
+# --- 反编译/反混淆前端 bundle（含第三方硬编码密钥，仅本地分析）---
+# 规则：只保留我们重建的 `<name>-oss/` 和上游克隆 `<name>-github/`。
+# 所有 `<name>/`（原始 minified bundle）+ `<name>-src/`（反混淆输出）
+# 都不入库——它们含 Stripe/Firebase/Google OAuth 等第三方嵌入密钥。
+_archived/
+
+# 反混淆 dump（通配所有 -src 后缀）
+frontend/*-src/
+
+# 原始 minified bundle（每个都有对应 -oss 干净重写版）
+frontend/auto-dex-site/
+frontend/blinks-miniapp/
+frontend/bomb-fun-site/
+frontend/huehub-dex-site/
+frontend/payment-specifications/
+frontend/payment-swagger/
+frontend/solagram-wallet/
+frontend/solagram-web-site/
+frontend/solana-wallet-mini-app-demo/
+frontend/unipass-app-h5/
+frontend/unipass-cms-frontend/
+frontend/unipass-payment-web/
+frontend/unipass-snap-frontend/
+frontend/unipass-snap-react/
+frontend/unipass-wallet-frontend/
+frontend/unipass-wallet-js/
+frontend/unipass-wallet-official-website/
+frontend/utxo-swap-site/
+
+# --- Node / Rust / Python 常规 ---
+node_modules/
+target/
+dist/
+build/
+.next/
+.astro/
+__pycache__/
+*.pyc
+.DS_Store
+

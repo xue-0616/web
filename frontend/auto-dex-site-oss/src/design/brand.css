@@ -1,0 +1,6 @@
+/* Per-product accent override for auto-dex-site-oss. Import AFTER tokens.css. */
+:root {
+  --accent:        #10b981;
+  --accent-hover:  #34d399;
+  --accent-ghost:  #10b98122;
+}

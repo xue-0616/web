@@ -1,0 +1,8 @@
+[package]
+name = "payment-contracts"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+ethers.workspace = true
+ethers-contract.workspace = true
+serde.workspace = true

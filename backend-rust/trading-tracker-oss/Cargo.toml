@@ -1,0 +1,76 @@
+[package]
+name = "trading-tracker-oss"
+version = "0.1.0"
+edition = "2021"
+description = "Open-source rewrite of the closed-source trading-tracker binary. Consumes StreamingFast Substreams for Solana DEX trades (Raydium AMM/CLMM/CPMM + Pump.fun) and exposes real-time price updates over JSON-RPC (jsonrpsee)."
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "trading-tracker"
+path = "src/main.rs"
+
+[dependencies]
+# -------- Async runtime + error handling --------
+tokio        = { version = "1.36", features = ["full"] }
+tokio-stream = "0.1"
+futures      = "0.3"
+async-stream = "0.3"   # Session 2: clean async fn -> Stream via try_stream! macro
+async-trait  = "0.1"
+thiserror    = "1"
+anyhow       = "1"
+
+# -------- Logging --------
+tracing             = "0.1"
+tracing-subscriber  = { version = "0.3", features = ["env-filter", "json"] }
+
+# -------- Config --------
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml       = "0.8"
+envy       = "0.4"  # env var -> struct, used for TRADING_TRACKER_* vars
+
+# -------- gRPC / Protobuf (substreams wire format) --------
+prost        = "0.12"
+prost-types  = "0.12"
+tonic        = { version = "0.11", features = ["tls", "tls-roots", "gzip"] }
+
+# -------- JSON-RPC server --------
+jsonrpsee = { version = "0.22", features = ["server", "macros", "ws-client", "http-client"] }
+
+# -------- Persistence --------
+redb = "2"
+
+# -------- Solana --------
+# Lightweight Pubkey + instruction types only (no curve25519/zeroize conflicts).
+# Session 3 adds solana-client and spl-token-2022 once we have pinned resolver
+# compatibility sorted; until then DEX parsers only need these surface types.
+solana-pubkey        = { version = "2", features = ["serde", "std"] }
+solana-instruction   = { version = "2", features = ["serde", "std"] }
+# Borsh is what Anchor uses for account layouts under the hood; using it
+# directly (instead of anchor-lang) avoids curve25519-dalek 3.x entirely.
+borsh                = { version = "1", features = ["derive"] }
+
+# -------- Utilities --------
+base64     = "0.21"
+bs58       = "0.5"
+hex        = "0.4"
+rust_decimal = "1"
+bigdecimal = "0.4"
+bytes      = "1"
+url        = "2"
+chrono     = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+tempfile    = "3"
+prost-types = "0.12"
+
+[build-dependencies]
+tonic-build         = "0.11"
+prost-build         = "0.12"
+protoc-bin-vendored = "3"   # ships a prebuilt protoc so no system dep is needed
+
+[profile.release]
+lto       = true
+opt-level = 3
+strip     = "debuginfo"
+codegen-units = 1

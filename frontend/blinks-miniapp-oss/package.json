@@ -1,0 +1,28 @@
+{
+  "name": "blinks-miniapp-oss",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "^14.2.13",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "@solana/actions": "^1.6.5",
+    "@solana/web3.js": "^1.95.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "@types/react": "^18",
+    "@types/node": "^20",
+    "vitest": "^2.1.2",
+    "@playwright/test": "^1.48.0"
+  }
+}

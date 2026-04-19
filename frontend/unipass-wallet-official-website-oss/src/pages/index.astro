@@ -1,0 +1,35 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { COPY } from "../content";
+const c = COPY.en;
+---
+<BaseLayout title="Home" locale="en">
+  <section style="padding: 4rem 0; text-align: center;">
+    <h1 style="font-size: 3rem; margin: 0 0 1rem;">{c.hero.headline}</h1>
+    <p style="font-size: 1.25rem; color: var(--muted); max-width: 40rem; margin: 0 auto 2rem;">
+      {c.hero.sub}
+    </p>
+    <a class="btn" href="/download">{c.hero.ctaPrimary}</a>
+    <a href="#features" style="margin-left: 1rem; color: var(--accent);">{c.hero.ctaSecondary} →</a>
+  </section>
+
+  <section id="features" style="padding: 4rem 0;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 2rem;">
+      {c.features.map((f) => (
+        <article style="padding: 2rem; background: var(--card); border: 1px solid var(--border); border-radius: 1rem;">
+          <div style="font-size: 2rem;">{f.icon}</div>
+          <h3 style="margin: 0.5rem 0;">{f.title}</h3>
+          <p style="color: var(--muted); margin: 0;">{f.body}</p>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section style="padding: 4rem 0;">
+    <h2>{c.security.headline}</h2>
+    <p style="color: var(--muted);">{c.security.body}</p>
+    <ul>
+      {c.security.bullets.map((b) => <li>{b}</li>)}
+    </ul>
+  </section>
+</BaseLayout>

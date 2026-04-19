@@ -1,0 +1,4 @@
+upstream: UniPass-Snap
+local: ../../upstream/UniPass-Snap
+subpath: packages/site (Next.js docs site)
+builder: next.js

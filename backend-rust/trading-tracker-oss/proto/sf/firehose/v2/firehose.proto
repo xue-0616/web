@@ -1,0 +1,26 @@
+// Minimal stub for sf.firehose.v2 — only the types imported by
+// sf/substreams/rpc/v2/service.proto. The original full definition lives
+// under streamingfast internal repos; our binary only uses Blocks/Response
+// from the substreams service and never calls Info, so these are mostly
+// placeholders for build-time import satisfaction.
+syntax = "proto3";
+package sf.firehose.v2;
+
+message InfoRequest {}
+
+message InfoResponse {
+  string chain_name = 1;
+  repeated string chain_name_aliases = 2;
+  uint64 first_streamable_block_num = 3;
+  string first_streamable_block_id = 4;
+  enum BlockIdEncoding {
+    BLOCK_ID_ENCODING_UNSET = 0;
+    BLOCK_ID_ENCODING_HEX = 1;
+    BLOCK_ID_ENCODING_0X_HEX = 2;
+    BLOCK_ID_ENCODING_BASE58 = 3;
+    BLOCK_ID_ENCODING_BASE64 = 4;
+    BLOCK_ID_ENCODING_BASE64URL = 5;
+  }
+  BlockIdEncoding block_id_encoding = 5;
+  repeated string block_features = 6;
+}

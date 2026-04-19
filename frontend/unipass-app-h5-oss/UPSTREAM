@@ -1,0 +1,4 @@
+upstream: unipass-frontend-test
+local: ../../upstream/unipass-frontend-test
+subpath: root (minimal H5 index.html)
+builder: static

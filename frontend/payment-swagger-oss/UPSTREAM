@@ -1,0 +1,4 @@
+upstream: UniPass-Wallet-Docs
+local: ../../upstream/UniPass-Wallet-Docs
+subpath: docs/develop/ + static swagger
+builder: docusaurus-v2

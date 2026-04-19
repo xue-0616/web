@@ -1,0 +1,11 @@
+[package]
+name = "smart-account-wallet"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+ethers.workspace = true
+serde.workspace = true
+hex.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+async-trait = "0.1"

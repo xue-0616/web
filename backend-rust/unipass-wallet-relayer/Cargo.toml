@@ -1,0 +1,58 @@
+[workspace]
+members = [
+    "crates/api",
+    "crates/api-utils",
+    "crates/configs",
+    "crates/contracts-abi",
+    "crates/daos-relayer",
+    "crates/execute-validator",
+    "crates/relayer",
+    "crates/relayer-log",
+    "crates/relayer-redis",
+    "crates/tokens-manager",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
+actix-web = "4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+anyhow = "1"
+thiserror = "1"
+ethers = { version = "2", features = ["legacy", "ws"] }
+ethers-contract = "2"
+hex = "0.4"
+redis = { version = "0.27", features = ["tokio-comp", "streams"] }
+deadpool-redis = "0.18"
+sea-orm = { version = "0.12.15", features = ["sqlx-mysql", "runtime-tokio-rustls", "macros"] }
+reqwest = { version = "0.11", features = ["json"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+[package]
+name = "unipass-wallet-relayer"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+actix-web.workspace = true
+actix-cors = "0.7"
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+sea-orm.workspace = true
+deadpool-redis.workspace = true
+hex.workspace = true
+
+api = { path = "crates/api" }
+configs = { path = "crates/configs" }
+relayer = { path = "crates/relayer" }
+relayer-redis = { path = "crates/relayer-redis" }

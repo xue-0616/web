@@ -1,0 +1,6 @@
+/* Per-product accent override for bomb-fun-site-oss. Import AFTER tokens.css. */
+:root {
+  --accent:        #f43f5e;
+  --accent-hover:  #fb7185;
+  --accent-ghost:  #f43f5e22;
+}

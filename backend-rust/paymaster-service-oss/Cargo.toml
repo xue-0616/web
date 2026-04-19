@@ -1,0 +1,45 @@
+[package]
+name = "paymaster-service-oss"
+version = "0.1.0"
+edition = "2021"
+description = "Open-source rewrite of the closed-source `paymaster-service` ELF — ERC-4337 VerifyingPaymaster off-chain signer + JSON-RPC server."
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "paymaster-service"
+path = "src/main.rs"
+
+[dependencies]
+# Runtime
+tokio      = { version = "1", features = ["macros", "rt-multi-thread", "time", "signal", "sync"] }
+anyhow     = "1"
+thiserror  = "1"
+
+# JSON-RPC (matches closed-source binary's jsonrpsee stack)
+jsonrpsee  = { version = "0.24", features = ["server", "macros"] }
+
+# EVM types + signing
+ethers-core    = "2"
+ethers-signers = "2"
+k256           = { version = "0.13", features = ["ecdsa", "std"] }
+
+# (de)serialisation
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+hex        = { version = "0.4", features = ["serde"] }
+
+# Observability
+tracing             = "0.1"
+tracing-subscriber  = { version = "0.3", features = ["env-filter", "json"] }
+
+# HTTP client for RPC (used to query chain state — nonce, gas, etc.)
+reqwest    = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto           = true
+opt-level     = 3
+strip         = "debuginfo"
+codegen-units = 1

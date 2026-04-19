@@ -1,0 +1,19 @@
+[package]
+name = "api-common"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+actix-web.workspace = true
+sea-orm.workspace = true
+deadpool-redis.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+rust_decimal.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+hex.workspace = true
+
+entity = { path = "../entity" }

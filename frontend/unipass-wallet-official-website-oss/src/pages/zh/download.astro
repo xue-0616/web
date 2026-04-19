@@ -1,0 +1,14 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { COPY } from "../../content";
+const c = COPY["zh-CN"].download;
+---
+<BaseLayout title="下载" locale="zh-CN">
+  <section style="padding: 4rem 0;">
+    <h1>{c.headline}</h1>
+    <p style="color: var(--muted);">{c.sub}</p>
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 2rem;">
+      {c.platforms.map((p) => <a class="btn" href={p.href}>{p.name}</a>)}
+    </div>
+  </section>
+</BaseLayout>
