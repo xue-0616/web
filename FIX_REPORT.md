@@ -242,7 +242,100 @@ chain-id → URL 映射的回归测试，防止 chainId 常量被静默改错导
 
 | ID | 严重度 | 说明 |
 |----|------|------|
-| HIGH-SW-1 | HIGH | tasks.claim TOCTOU 竞态，需改成 UPDATE-WHERE |
-| HIGH-SW-6 | HIGH | candlestick unbounded query |
 | HIGH-FM-3（真实 solver） | HIGH | fail-closed 门已加，但真正的 CKB batch-tx builder 仍缺 |
 | MED-* | MEDIUM | 详见 `DEEP_AUDIT_SWAP_FARM_RELAYER.md` 的 MED 清单 |
+
+---
+
+## Round 4 — 2026-04-20 闭环全部 HIGH/CRIT 项
+
+### DR-6. [HIGH] HIGH-SW-1 — tasks.claim TOCTOU 竞态
+
+**File:** `backend-rust/utxo-swap-sequencer/crates/api/src/tasks/claim.rs`,
+`crates/migration/src/m20260420_000000_points_history_unique_claim.rs`
+
+两道竞态一次修掉：
+
+1. **重复领取** — SELECT/INSERT 间隙：两个并发请求都看到"未领取"
+   就都 INSERT，造成双倍积分。修复加了 UNIQUE idx
+   `(account_id, source_type, source_id)`，配合 sea_orm
+   `ON CONFLICT DO NOTHING` + `DbErr::RecordNotInserted -> 400`。
+2. **积分丢更新** — `SELECT total_points` + `UPDATE = read+delta`：
+   两个并发领取读到同一个 base value，互相覆盖。改成
+   `UPDATE accounts SET total_points = total_points + ?`
+   via `Expr::col(...).add(...)` 单语句。
+
+两步包在同一个 sea_orm transaction 里，任一失败整体回滚。
+`MIGRATION_VERSION` 16 → 17，启动时 `verify_migration_count()` 卡住忘记同步的人。
+
+### DR-7. [HIGH] HIGH-SW-4 / 5 / 6 一并处理
+
+**File:** `crates/utils/src/intents_manager/manager.rs`,
+`crates/api/src/pools/pool_list.rs`, `crates/api/src/pools/candlestick.rs`
+
+| sub | fix |
+|-----|-----|
+| SW-4 | `mark_processing(ids) -> Result<()>` 改名 `claim_for_processing -> Result<Vec<u64>>`，强制 caller 看到实际抢到的 ID（防 worker race）。原 API 留 `#[deprecated, doc(hidden)]` 包装，debug_assert 防止误用。底层 `SELECT ... FOR UPDATE` + `UPDATE`，单事务。|
+| SW-5 | `pool_list` 的 N+1 查询：原本每 pool 2 条 token SELECT（page_size=100 时多达 200 个 query），改成单条 IN 查询 + HashMap 查表，从 ~201 query 降到 2。|
+| SW-6 | `candlestick` 之前忽略 `start_time`/`end_time`，无 LIMIT。新增窗口校验（默认最近 7 天，最大 365 天，`start>=end` 拒绝），LIMIT 20000 行硬上限。+5 单测 pin 常量与窗口算术。|
+
+### DR-8. [CRIT*] CRIT-RL-1 — `constant_time_eq` 长度旁信道
+
+**File:** `unipass-wallet-relayer/src/security.rs`,
+`utxoswap-farm-sequencer/src/security.rs`,
+`huehub-token-distributor/src/security.rs`,
+`payment-server/crates/common/src/crypto.rs`
+
+原实现 `if a.len() != b.len() { return false }` 短路，攻击者可
+通过响应延迟探测期望 API key 的长度。统一改为 length-blinded
+循环：永远迭代 `max(a.len, b.len)` 次，越界读 0；最终用按位 AND 把
+"字节相等"和"长度相等"两个 u8 折叠（lower 到 setcc，无分支）。
+
+`payment-server` 顺带加了 4 个 HMAC verify 测试覆盖 happy path、
+篡改末字节、短签名、超长签名。
+
+### DR-9. [CRIT] CRIT-FM-2 — solver batch 内 user state stale
+
+**File:** `backend-rust/utxoswap-farm-sequencer/crates/intent-solver/src/lib.rs`
+
+`solve_batch` 原本对每个 intent 都从 `intent.user_staked_amount /
+user_reward_debt` 读取 —— 这俩字段是用户 cell 的 pre-batch 快照。
+同一用户 batch 内 2 笔 intent 都看到 pre-batch 状态，导致：
+
+1. Deposit + Deposit 同 user：第二笔的 pending_reward 用 stale debt=0
+   再算一次 → 用户拿到 pre-batch pending **两次**
+2. Deposit + Harvest 同 user：harvest 把 deposit 已结算的 pending 重新领取
+3. Withdraw + Withdraw 同 user：两笔都看到 stake=1000，可能双花
+
+修复用 `HashMap<lock_hash, UserPosition>` 把 `(staked, reward_debt)`
+跨 intent 线程化，第一次见某用户从 intent 快照初始化，之后在 batch
+内读写。MasterChef invariant `debt = staked * acc / P` 抽到
+`UserPosition::new_debt()` 不重复四遍。`saturating_*` 防 u128 溢出。
+
+### DR-10. [INFRA] CI hook for intent-solver
+
+`.github/workflows/rust-tests.yml` 的 `utxoswap-farm-sequencer` job
+追加 `cargo test -p intent-solver` —— 4 个新 CRIT-FM-2 回归测试 + 9 个原有 solver 测试。
+
+### Round 4 测试账面
+
+| 包 | 增量 tests | 覆盖 |
+|----|------|------|
+| `migration` | 1 (新文件) | UNIQUE idx 创建/回滚 |
+| `utxo-swap-sequencer` api lib | +5 | candlestick 窗口算术与常量 |
+| `unipass-wallet-relayer` security | +1 | length-blinded 行为 |
+| `payment-server` common::crypto | +4 | HMAC verify 4 个 case |
+| `utxoswap-farm-sequencer` intent-solver | +4 | CRIT-FM-2 四类同 batch 互相干扰 |
+| **本轮合计** | **+15** | |
+
+### 累计自 Round 1 起
+
+- **+52 tests**（前三轮 +37，本轮 +15）
+- **10 commits ahead of origin/main**
+- **3 个 CI job** 新增/扩展锁回归
+- **1 个 DB migration** 新增
+
+### 当前状态
+
+所有资金安全相关 P0/P1（CRITICAL + HIGH）已闭环。剩余仅 MED-级
+和真实功能补全（HIGH-FM-3 真实 solver，非安全漏洞）。
