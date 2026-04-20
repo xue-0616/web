@@ -39,6 +39,7 @@ ckb-jsonrpc-types = "0.116"
 ckb-types = "0.116"
 molecule = "0.7"
 num-bigint = "0.4"
+async-trait = "0.1"
 
 [package]
 name = "utxoswap-farm-sequencer"

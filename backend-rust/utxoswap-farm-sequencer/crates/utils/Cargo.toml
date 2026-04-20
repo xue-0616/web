@@ -16,6 +16,7 @@ chrono.workspace = true
 tokio.workspace = true
 hex.workspace = true
 uuid = { version = "1", features = ["v4"] }
+async-trait.workspace = true
 
 api-common = { path = "../api-common" }
 entity_crate = { package = "entity", path = "../entity" }

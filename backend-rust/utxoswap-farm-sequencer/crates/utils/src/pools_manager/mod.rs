@@ -1,3 +1,4 @@
+pub mod batch_tx_builder;
 pub mod block_watcher;
 pub mod intents_submitter;
 pub mod lock;
