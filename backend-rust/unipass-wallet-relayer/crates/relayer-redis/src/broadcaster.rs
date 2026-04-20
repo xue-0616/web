@@ -201,6 +201,93 @@ pub fn parse_stream_entry(
     })
 }
 
+/// Why the consumer should XACK an entry.
+///
+/// Both variants remove the entry from the PEL so the stream
+/// doesn't redeliver it; the enum variant just tells operator
+/// logs / metrics which branch happened.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AckReason {
+    /// Happy path: the broadcaster returned a tx hash. We XACK
+    /// so the entry leaves the PEL. The hash is kept for the
+    /// audit log line.
+    Success(TxHash),
+    /// Terminal failure: the entry was malformed in a way retries
+    /// can't fix. We XACK so the stream doesn't redeliver the
+    /// same bad message forever. The message is logged at
+    /// ERROR level so operators can grep for it.
+    Poisoned(String),
+}
+
+/// Why the consumer should leave an entry in the PEL.
+///
+/// Both variants mean: do NOT XACK. Next XREADGROUP will
+/// redeliver the same entry with an `idle` count bump, so
+/// stuck entries show up in `XPENDING` output for debugging.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RetainReason {
+    /// The broadcaster said it can't process yet (e.g.
+    /// NoopTxBroadcaster during rollout). Retry next tick.
+    NotImplemented(&'static str),
+    /// Network / RPC flake. Retry next tick.
+    Transient(String),
+}
+
+/// The consumer's per-entry action.
+///
+/// `consume_once_with_broadcaster` (see relayer-redis lib.rs in
+/// a future PR) will walk these and execute the XACKs / logs
+/// accordingly. Keeping the decision as a typed value means the
+/// classification logic is unit-testable in isolation — no
+/// Redis connection needed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum EntryAction {
+    Ack {
+        stream_id: String,
+        reason: AckReason,
+    },
+    Retain {
+        stream_id: String,
+        reason: RetainReason,
+    },
+}
+
+/// Run `broadcaster.broadcast()` on each parsed entry and
+/// produce the list of XACK / retain decisions.
+///
+/// This is the composable middle layer between `parse_stream_entry`
+/// and the eventual consume_once Redis driver. Testable with
+/// NoopTxBroadcaster + a ScriptedTxBroadcaster that yields a
+/// fixed outcome per call — no I/O, no network.
+pub async fn process_entries<B: TxBroadcaster>(
+    broadcaster: &B,
+    entries: Vec<TxStreamEntry>,
+) -> Vec<EntryAction> {
+    let mut actions = Vec::with_capacity(entries.len());
+    for entry in entries {
+        let action = match broadcaster.broadcast(&entry).await {
+            Ok(tx_hash) => EntryAction::Ack {
+                stream_id: entry.stream_id,
+                reason: AckReason::Success(tx_hash),
+            },
+            Err(BroadcastError::InvalidInput(msg)) => EntryAction::Ack {
+                stream_id: entry.stream_id,
+                reason: AckReason::Poisoned(msg),
+            },
+            Err(BroadcastError::Transient(msg)) => EntryAction::Retain {
+                stream_id: entry.stream_id,
+                reason: RetainReason::Transient(msg),
+            },
+            Err(BroadcastError::NotImplemented(why)) => EntryAction::Retain {
+                stream_id: entry.stream_id,
+                reason: RetainReason::NotImplemented(why),
+            },
+        };
+        actions.push(action);
+    }
+    actions
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -334,5 +421,155 @@ mod tests {
             BroadcastError::NotImplemented(_) => {}
             other => panic!("expected NotImplemented, got {other:?}"),
         }
+    }
+
+    /// Broadcaster that yields a pre-set sequence of results
+    /// (one per call). Used to drive process_entries() through
+    /// each variant deterministically.
+    struct ScriptedBroadcaster {
+        outcomes: std::sync::Mutex<Vec<Result<TxHash, BroadcastError>>>,
+    }
+    impl ScriptedBroadcaster {
+        fn new(outcomes: Vec<Result<TxHash, BroadcastError>>) -> Self {
+            Self {
+                outcomes: std::sync::Mutex::new(outcomes.into_iter().rev().collect()),
+            }
+        }
+    }
+    #[async_trait::async_trait]
+    impl TxBroadcaster for ScriptedBroadcaster {
+        async fn broadcast(&self, _entry: &TxStreamEntry) -> Result<TxHash, BroadcastError> {
+            self.outcomes.lock().unwrap().pop().expect("no scripted outcome")
+        }
+    }
+
+    fn mk_entry(id: &str) -> TxStreamEntry {
+        TxStreamEntry {
+            stream_id: id.into(),
+            chain_id: 1,
+            wallet: "0x1111111111111111111111111111111111111111".into(),
+            calldata_hex: "0x00".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn process_entries_empty_yields_empty_actions() {
+        let actions = process_entries(&NoopTxBroadcaster, vec![]).await;
+        assert!(actions.is_empty());
+    }
+
+    #[tokio::test]
+    async fn noop_entries_all_retain_not_implemented() {
+        let entries = vec![mk_entry("1-0"), mk_entry("2-0"), mk_entry("3-0")];
+        let actions = process_entries(&NoopTxBroadcaster, entries).await;
+        assert_eq!(actions.len(), 3);
+        for (i, action) in actions.iter().enumerate() {
+            match action {
+                EntryAction::Retain {
+                    stream_id,
+                    reason: RetainReason::NotImplemented(_),
+                } => {
+                    assert!(stream_id.starts_with(&format!("{}-", i + 1)));
+                }
+                other => panic!("entry {i}: expected Retain(NotImplemented), got {other:?}"),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn ok_entry_yields_ack_success_with_tx_hash() {
+        let b = ScriptedBroadcaster::new(vec![Ok("0xdeadbeef".into())]);
+        let actions = process_entries(&b, vec![mk_entry("1-0")]).await;
+        assert_eq!(actions.len(), 1);
+        match &actions[0] {
+            EntryAction::Ack {
+                stream_id,
+                reason: AckReason::Success(tx_hash),
+            } => {
+                assert_eq!(stream_id, "1-0");
+                assert_eq!(tx_hash, "0xdeadbeef");
+            }
+            other => panic!("expected Ack(Success), got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn invalid_input_yields_ack_poisoned() {
+        let b = ScriptedBroadcaster::new(vec![Err(BroadcastError::InvalidInput(
+            "bad calldata".into(),
+        ))]);
+        let actions = process_entries(&b, vec![mk_entry("1-0")]).await;
+        match &actions[0] {
+            EntryAction::Ack {
+                reason: AckReason::Poisoned(msg),
+                ..
+            } => assert!(msg.contains("bad calldata")),
+            other => panic!("expected Ack(Poisoned), got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn transient_yields_retain_not_ack() {
+        // This is the load-bearing invariant: a Transient failure
+        // MUST NOT produce an Ack, or we'd silently drop the tx.
+        let b = ScriptedBroadcaster::new(vec![Err(BroadcastError::Transient(
+            "rpc timeout".into(),
+        ))]);
+        let actions = process_entries(&b, vec![mk_entry("1-0")]).await;
+        match &actions[0] {
+            EntryAction::Retain {
+                reason: RetainReason::Transient(msg),
+                ..
+            } => assert!(msg.contains("rpc timeout")),
+            other => panic!("transient must map to Retain, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn mixed_batch_classifies_each_independently() {
+        // Walk all four branches in one call: Ok, InvalidInput,
+        // Transient, NotImplemented. The per-entry decisions must
+        // not bleed into each other.
+        let b = ScriptedBroadcaster::new(vec![
+            Ok("0xaaaa".into()),
+            Err(BroadcastError::InvalidInput("x".into())),
+            Err(BroadcastError::Transient("y".into())),
+            Err(BroadcastError::NotImplemented("z")),
+        ]);
+        let entries = vec![
+            mk_entry("1-0"),
+            mk_entry("2-0"),
+            mk_entry("3-0"),
+            mk_entry("4-0"),
+        ];
+        let actions = process_entries(&b, entries).await;
+        assert!(matches!(
+            &actions[0],
+            EntryAction::Ack {
+                reason: AckReason::Success(_),
+                ..
+            }
+        ));
+        assert!(matches!(
+            &actions[1],
+            EntryAction::Ack {
+                reason: AckReason::Poisoned(_),
+                ..
+            }
+        ));
+        assert!(matches!(
+            &actions[2],
+            EntryAction::Retain {
+                reason: RetainReason::Transient(_),
+                ..
+            }
+        ));
+        assert!(matches!(
+            &actions[3],
+            EntryAction::Retain {
+                reason: RetainReason::NotImplemented(_),
+                ..
+            }
+        ));
     }
 }
