@@ -1,0 +1,265 @@
+# Prometheus alert rules for the hardened backends.
+#
+# Targets every metric emitted from the two scaffolds landed in
+# rounds 9-10 (HIGH-FM-3 farm-seq batch builder,
+# MED-RL-3 relayer Redis consumer) plus the standard
+# actix-web process-level signals that huehub-observability
+# already exposes.
+#
+# Validated with:  promtool check rules deploy/prometheus/alerts.yml
+#
+# How to wire in:
+#   Prometheus:   rule_files: ["/etc/prometheus/alerts.yml"]
+#   AlertManager: routes → receivers via `severity` label below.
+#
+# Severity conventions:
+#   critical — pages on-call 24x7.  User funds at risk or
+#              user-facing service down.
+#   warning  — wakes on-call during business hours.  Precursor
+#              to a critical if left unattended.
+#   info     — dashboard annotation only, no paging.
+#
+# The `for:` durations are chosen so a single tick of noise
+# (e.g. one transient RPC blip) doesn't page.  If the noise
+# floor turns out to be higher in prod, tune `for:` upward
+# rather than raising the threshold — that preserves the
+# underlying SLO.
+
+groups:
+
+  # =======================================================================
+  # farm-seq  (HIGH-FM-3 scaffold)
+  # =======================================================================
+  - name: farm-sequencer
+    interval: 30s
+    rules:
+
+      - alert: FarmBatchAllFailed
+        # Every batch outcome in the last 15m was `failed` (poisoned
+        # input).  Either a schema drift between submit endpoint and
+        # the on-chain cell format, or an attacker feeding bad
+        # submissions.  Either way, operators need eyes on it.
+        expr: |
+          (
+            sum(rate(farm_batch_result_total{result="failed"}[15m]))
+            / sum(rate(farm_batch_result_total[15m]))
+          ) > 0.95
+          and
+          sum(rate(farm_batch_result_total[15m])) > 0
+        for: 10m
+        labels:
+          severity: critical
+          service: farm-sequencer
+        annotations:
+          summary: "farm-seq: >95% of batches failing (InvalidInput)"
+          description: |
+            In the last 15m, almost every batch built by the farm
+            sequencer returned BuildError::InvalidInput and was marked
+            terminally failed.  This is NEVER normal — our own
+            submit endpoint validates inputs before persisting.
+            Check for recent deploys to either the submit handler
+            or the BatchTxBuilder impl.  Runbook: see
+            docs/runbook.md §farm-batch-failing.
+
+      - alert: FarmClaimRaceChronic
+        # claim() returned affected=0 more than 10 times in 5m.
+        # Expected near-zero in single-replica deploy; a chronic
+        # non-zero usually means two replicas with the same
+        # consumer id are stepping on each other, or the
+        # FARM_PROCESSING_ENABLED gate is flipping.
+        expr: increase(farm_batch_claim_lost_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: farm-sequencer
+        annotations:
+          summary: "farm-seq: chronic claim-race (possible double-replica)"
+          description: |
+            claim() returned 0 rows-affected >10 times in the last
+            5m.  Likely cause: a second replica of farm-sequencer
+            is running with the same DB and racing us on rows.
+            Check `kubectl get pods -l app=farm-sequencer` — expect 1.
+
+      - alert: FarmBatchBuildSlow
+        # p99 of the happy-path build histogram over 5m.  Threshold
+        # 10s is deliberately generous; CKB RPC roundtrips should
+        # never come close.  If we're seeing 10s+ builds, either
+        # CKB RPC is degraded or we have a pathological batch size.
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (le) (rate(farm_batch_build_duration_seconds_bucket[5m]))
+          ) > 10
+        for: 10m
+        labels:
+          severity: warning
+          service: farm-sequencer
+        annotations:
+          summary: "farm-seq: batch build p99 > 10s for 10m"
+          description: |
+            The happy-path build latency has stayed above 10s at p99
+            for 10 minutes.  Check CKB RPC health; if RPC is fine,
+            examine batch size (was the max_batch_size env var
+            raised recently?).
+
+      - alert: FarmProcessingStalled
+        # No batches have been claimed in 30m despite pending work
+        # existing in the DB.  We don't have a direct "pending row
+        # count" metric here (it'd need a DB-scraper), so this rule
+        # leans on the rate going to zero with claim_lost also at
+        # zero — meaning nothing even tried to run.  Combine with
+        # an external DB-row-count exporter for a full SLO.
+        expr: |
+          rate(farm_batch_claimed_intents_total[30m]) == 0
+          and
+          rate(farm_batch_claim_lost_total[30m]) == 0
+        for: 30m
+        labels:
+          severity: warning
+          service: farm-sequencer
+        annotations:
+          summary: "farm-seq: no batches processed in 30m"
+          description: |
+            No rows have been claimed in 30m AND no claims have
+            failed.  Either FARM_PROCESSING_ENABLED=false (expected
+            pre-launch; silence this rule) or the pools-manager
+            loop has died silently.  Check service logs for
+            'pools-manager: loop exited'.
+
+  # =======================================================================
+  # relayer  (MED-RL-3 scaffold)
+  # =======================================================================
+  - name: unipass-wallet-relayer
+    interval: 30s
+    rules:
+
+      - alert: RelayerStreamBacklogGrowing
+        # The load-bearing relayer SLI.  The stream_backlog gauge
+        # rising monotonically for 10m means either (a) the
+        # consumer is broken/disabled and not draining, or (b) the
+        # upstream RPC is broken and every entry is retaining.
+        # Either way, user txs are stuck in limbo.
+        expr: |
+          (
+            deriv(relayer_stream_backlog[10m]) > 0
+            and
+            relayer_stream_backlog > 50
+          )
+        for: 10m
+        labels:
+          severity: critical
+          service: unipass-wallet-relayer
+        annotations:
+          summary: "relayer: tx-stream backlog growing for 10m (now {{ $value }})"
+          description: |
+            relayer_stream_backlog has been strictly increasing for
+            10m and exceeds 50 entries.  User-submitted meta-txs
+            are queued but not being drained.  Check:
+              1. RELAYER_CONSUMER_ENABLED — if false, this is
+                 expected (scaffold is fail-closed).  Silence.
+              2. Downstream Ethereum RPC health — look at
+                 relayer_entry_result_total{result="retain_transient"}
+                 rate.  If high, the RPC is the root cause.
+              3. Consumer liveness — logs for 'Consumer tick error'.
+
+      - alert: RelayerPoisonedEntries
+        # ack_poisoned fires when parse_stream_entry or the
+        # broadcaster rejects an entry as InvalidInput.  Our own
+        # submit endpoint validates before XADD, so ANY poisoned
+        # entry means either a schema drift between builder and
+        # parser (the round-trip unit test should catch this in
+        # CI, but a hot-patched binary could bypass that) or a
+        # non-sanctioned producer is writing to the stream.
+        expr: increase(relayer_entry_result_total{result="ack_poisoned"}[10m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          service: unipass-wallet-relayer
+        annotations:
+          summary: "relayer: entries rejected as poisoned"
+          description: |
+            At least one entry was ack_poisoned in the last 10m.
+            The submit endpoint validates inputs before XADD so
+            this should never happen.  Investigate either:
+              - a schema drift (check the
+                build_stream_fields_round_trips_through_parse
+                test in CI)
+              - a rogue producer writing directly to the stream.
+
+      - alert: RelayerTransientSustained
+        # retain_transient fires on RPC timeout / rpc 5xx.  A low
+        # background rate is fine (the world's networks are not
+        # perfect).  A sustained rate above 0.1/s for 10m means
+        # the RPC provider is degraded.
+        expr: |
+          rate(relayer_entry_result_total{result="retain_transient"}[5m]) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          service: unipass-wallet-relayer
+        annotations:
+          summary: "relayer: sustained RPC transient failures"
+          description: |
+            retain_transient rate > 0.1/s sustained for 10m.
+            Downstream Ethereum RPC is likely degraded.  Check the
+            provider's status page; fail over to a backup RPC if
+            available.
+
+      - alert: RelayerConsumerDead
+        # Backlog exists AND no entries have been processed (no
+        # result counter has ticked) in 15m.  The XLEN gauge rises,
+        # the result counter doesn't.  Consumer task is wedged.
+        expr: |
+          relayer_stream_backlog > 0
+          and
+          rate(relayer_entry_result_total[15m]) == 0
+        for: 15m
+        labels:
+          severity: critical
+          service: unipass-wallet-relayer
+        annotations:
+          summary: "relayer: consumer wedged (backlog>0 but no results)"
+          description: |
+            The stream has entries but the consumer hasn't produced
+            any EntryAction in 15m.  The consumer task has likely
+            panicked or deadlocked silently.  `kubectl rollout
+            restart` the relayer deployment.
+
+  # =======================================================================
+  # Process / service-level defaults (applies to every service
+  # that imports huehub-observability's install() + actix
+  # middleware).
+  # =======================================================================
+  - name: service-health
+    interval: 30s
+    rules:
+
+      - alert: ServiceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} target down"
+          description: |
+            Prometheus has not been able to scrape {{ $labels.job }}
+            for 2m.  Either the pod is CrashLoopBackOff or network.
+
+      - alert: HighHttpErrorRate
+        # actix-web's http_requests_total (via tracing-actix-web
+        # integration with the metrics façade) — threshold is
+        # deliberately high-but-not-pathological.  Tune per service.
+        expr: |
+          (
+            sum by (job) (rate(http_requests_total{status=~"5.."}[5m]))
+            / sum by (job) (rate(http_requests_total[5m]))
+          ) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.job }}: 5xx rate > 5% for 10m"
+          description: |
+            {{ $labels.job }} is returning 5xx on more than 5% of
+            requests over a 10m window.  Check the service logs
+            for recent panics or DB connection errors.
