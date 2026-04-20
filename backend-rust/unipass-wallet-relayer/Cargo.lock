@@ -3678,9 +3678,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "api",
+ "async-trait",
  "daos-relayer",
  "deadpool-redis",
  "ethers",
+ "hex",
  "redis",
  "sea-orm",
  "serde",

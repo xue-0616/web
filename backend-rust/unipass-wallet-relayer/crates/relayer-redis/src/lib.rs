@@ -1,5 +1,7 @@
 use api::context::RelayerContext;
 
+pub mod broadcaster;
+
 pub const TX_STREAM_KEY: &str = "relayer:tx_stream";
 pub const TX_GROUP: &str = "relayer_workers";
 
