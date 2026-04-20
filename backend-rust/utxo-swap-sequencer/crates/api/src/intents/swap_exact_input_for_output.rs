@@ -325,6 +325,153 @@ fn validate_transaction(tx_bytes: &[u8]) -> Result<(), ApiError> {
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    //! Regression tests for CRIT-SW-1 and CRIT-SW-2.
+    //!
+    //! Before the fix, `validate_transaction` read `tx_bytes[0..4]` as the
+    //! `version` field and rejected all real CKB transactions (whose first
+    //! 4 bytes are the molecule `total_size`, i.e. the length of the table
+    //! itself). It also misaligned `parse_intent_from_tx` because it drove
+    //! its walk from the wrong base offset. These tests build minimal
+    //! well-formed molecule Transaction bytes and prove both functions
+    //! accept them, and reject the obvious corruption cases.
+    use super::*;
+
+    /// Build a minimal molecule-encoded CKB Transaction.
+    ///
+    /// Layout (little-endian):
+    ///   Transaction table:
+    ///     total_size (4) | offsets[raw,witnesses] (2 * 4) | RawTransaction | witnesses
+    ///   RawTransaction table (6 fields: version, cell_deps, header_deps,
+    ///                        inputs, outputs, outputs_data):
+    ///     total_size (4) | offsets[0..6] (6 * 4) | version(4) | cell_deps
+    ///     | header_deps | inputs | outputs | outputs_data
+    ///
+    /// We emit empty dynvecs (4-byte `total_size = 4`) for every variable
+    /// field and one output_data item containing `output_data_blob`.
+    fn build_tx(version: u32, output_data_blob: &[u8]) -> Vec<u8> {
+        // --- build outputs_data dynvec with a single item --------------
+        // dynvec: total_size (4) | offsets[1..=n] (n * 4) | items
+        // For 1 item: header = 4 + 4 = 8, item_start = 8.
+        let od_header_len = 4u32 + 4u32;
+        let od_total = od_header_len + output_data_blob.len() as u32;
+        let mut outputs_data = Vec::with_capacity(od_total as usize);
+        outputs_data.extend_from_slice(&od_total.to_le_bytes());
+        outputs_data.extend_from_slice(&od_header_len.to_le_bytes()); // item 0 offset
+        outputs_data.extend_from_slice(output_data_blob);
+
+        // --- empty dynvecs for cell_deps/header_deps/inputs/outputs ----
+        let empty_dynvec: [u8; 4] = 4u32.to_le_bytes();
+
+        // --- build RawTransaction --------------------------------------
+        // 6 fields, header = 4 + 6*4 = 28.
+        let fields: [&[u8]; 6] = [
+            &version.to_le_bytes(),
+            &empty_dynvec,
+            &empty_dynvec,
+            &empty_dynvec,
+            &empty_dynvec,
+            &outputs_data,
+        ];
+        let header_len = 4u32 + 6 * 4;
+        let mut offsets = Vec::with_capacity(6 * 4);
+        let mut cursor = header_len;
+        for f in &fields {
+            offsets.extend_from_slice(&cursor.to_le_bytes());
+            cursor += f.len() as u32;
+        }
+        let raw_total = cursor;
+        let mut raw = Vec::with_capacity(raw_total as usize);
+        raw.extend_from_slice(&raw_total.to_le_bytes());
+        raw.extend_from_slice(&offsets);
+        for f in &fields {
+            raw.extend_from_slice(f);
+        }
+
+        // --- build Transaction (raw, witnesses) ------------------------
+        let tx_header_len = 4u32 + 2 * 4;
+        let witnesses = empty_dynvec; // empty witnesses dynvec
+        let tx_total = tx_header_len + raw.len() as u32 + witnesses.len() as u32;
+        let mut tx = Vec::with_capacity(tx_total as usize);
+        tx.extend_from_slice(&tx_total.to_le_bytes());
+        tx.extend_from_slice(&tx_header_len.to_le_bytes()); // raw offset
+        tx.extend_from_slice(&(tx_header_len + raw.len() as u32).to_le_bytes()); // witnesses offset
+        tx.extend_from_slice(&raw);
+        tx.extend_from_slice(&witnesses);
+
+        // Pad to MIN_TX_SIZE so size gates pass. We keep `total_size`
+        // pointing at the real end of the table, padding beyond it is
+        // allowed by the length checks (they compare `<=`).
+        if tx.len() < 84 {
+            tx.resize(84, 0);
+        }
+        tx
+    }
+
+    #[test]
+    fn validate_accepts_wellformed_v0_tx() {
+        // CRIT-SW-1 regression: before the fix this would have
+        // interpreted tx_bytes[0..4] (total_size) as "version" and
+        // rejected every real transaction.
+        let tx = build_tx(0, &[]);
+        assert!(validate_transaction(&tx).is_ok(),
+            "well-formed v=0 tx must pass validate_transaction");
+    }
+
+    #[test]
+    fn validate_rejects_nonzero_version_inside_raw() {
+        // The version lives INSIDE RawTransaction, not at tx[0..4].
+        // Put version=7 there and confirm we catch it now that we're
+        // reading the right offset.
+        let tx = build_tx(7, &[]);
+        let err = validate_transaction(&tx).expect_err("v=7 must be rejected");
+        assert!(format!("{:?}", err).contains("Invalid transaction version"));
+    }
+
+    #[test]
+    fn validate_rejects_truncated() {
+        let err = validate_transaction(&[0u8; 10]).unwrap_err();
+        assert!(format!("{:?}", err).contains("too small"));
+    }
+
+    #[test]
+    fn validate_rejects_oversized_total_size() {
+        let mut tx = build_tx(0, &[]);
+        // Pretend total_size is huge.
+        tx[0..4].copy_from_slice(&u32::MAX.to_le_bytes());
+        let err = validate_transaction(&tx).unwrap_err();
+        assert!(format!("{:?}", err).contains("total_size"));
+    }
+
+    #[test]
+    fn parse_intent_walks_outputs_data_from_correct_base() {
+        // CRIT-SW-2 regression: parse_intent_from_tx has to drive its
+        // walk from the correct raw_offset and then from raw[24..28]
+        // to find outputs_data. If those offsets were wrong, this
+        // builder's single output-data blob would never be visited
+        // and we'd get "no valid intent found" for the wrong reason
+        // (wrong walk) instead of the right reason (payload isn't a
+        // real intent).
+        //
+        // We can't assert "parse succeeds" without a real intent
+        // payload, but we CAN assert that parse_intent was reached by
+        // checking the error is "MissingField" (meaning: we did walk
+        // the outputs_data correctly and tried each item) rather than
+        // "InvalidLength" (meaning: offset math blew up).
+        let blob = b"not-a-real-intent-but-non-empty";
+        let tx = build_tx(0, blob);
+        let err = parse_intent_from_tx(&tx).unwrap_err();
+        match err {
+            types::intent::parser::ParseError::MissingField(msg) => {
+                assert!(msg.contains("no valid intent"),
+                    "expected post-walk failure, got: {}", msg);
+            }
+            other => panic!("expected MissingField, got {:?}", other),
+        }
+    }
+}
+
 /// Notify intent manager of new intent via Redis pub/sub
 async fn notify_new_intent(ctx: &AppContext, intent_id: u64) -> Result<(), ApiError> {
     let mut conn = ctx.redis_conn().await.map_err(|e| ApiError::Redis(e.to_string()))?;
