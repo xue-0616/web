@@ -32,6 +32,15 @@ pub async fn handler(
     ctx: web::Data<AppContext>,
     body: web::Json<CreatePoolRequest>,
 ) -> Result<HttpResponse, ApiError> {
+    // HIGH-FM-3 fail-closed gate: creating a pool without a working
+    // processor is also pointless — the pool row would just sit there.
+    if !ctx.config.farm_processing_enabled {
+        return Err(ApiError::ServiceUnavailable(
+            "Pool creation is temporarily disabled (FARM_PROCESSING_ENABLED=false)."
+                .to_string(),
+        ));
+    }
+
     let req = body.into_inner();
 
     // 1. Validate parameters

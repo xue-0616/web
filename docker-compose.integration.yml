@@ -209,6 +209,12 @@ services:
       FARM_API_KEY: ${FARM_API_KEY:?set FARM_API_KEY in .env.integration}
       FARM_ADMIN_ADDRESSES: ${FARM_ADMIN_ADDRESSES:-}
       FARM_ADMIN_PUBKEYS: ${FARM_ADMIN_PUBKEYS:-}
+      # HIGH-FM-3: leave unset for rehearsal. Setting it to 1 would
+      # open the `/intents/submit` endpoint, but the background solver
+      # loop is still a debug-log placeholder — any intent accepted
+      # would sit Pending forever. Only flip once the real CKB batch-tx
+      # builder is wired in.
+      FARM_PROCESSING_ENABLED: ${FARM_PROCESSING_ENABLED:-}
       # CKB RPC is optional for pure process-startup rehearsal; the
       # service parses these fields with envy at boot and will refuse
       # to start if they are missing, so we provide a placeholder.

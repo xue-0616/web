@@ -11,6 +11,11 @@ pub enum ApiError {
     NotFound(String),
     #[error("Internal: {0}")]
     Internal(String),
+    /// Returned when an API endpoint is reachable but the feature it
+    /// fronts is deliberately disabled (e.g. HIGH-FM-3 fail-closed gate).
+    /// Maps to HTTP 503.
+    #[error("Service unavailable: {0}")]
+    ServiceUnavailable(String),
 }
 
 impl actix_web::ResponseError for ApiError {
@@ -20,6 +25,7 @@ impl actix_web::ResponseError for ApiError {
             Self::Forbidden(_) => StatusCode::FORBIDDEN,
             Self::NotFound(_) => StatusCode::NOT_FOUND,
             Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::ServiceUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
         }
     }
     fn error_response(&self) -> HttpResponse {

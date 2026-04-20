@@ -72,6 +72,30 @@ async fn main() -> anyhow::Result<()> {
         );
     }
 
+    // HIGH-FM-3: fail-closed. The pools-manager background loop is
+    // currently a debug-log-only stub; flipping this to `true` without
+    // also wiring the real CKB batch-tx builder will accept user LP
+    // tokens into the intent table with no way out.
+    let farm_processing_enabled = std::env::var("FARM_PROCESSING_ENABLED")
+        .ok()
+        .as_deref()
+        .map(|s| matches!(s.trim().to_ascii_lowercase().as_str(),
+                          "1" | "true" | "yes" | "on"))
+        .unwrap_or(false);
+    if farm_processing_enabled {
+        tracing::warn!(
+            "FARM_PROCESSING_ENABLED=true — farm intents will be accepted and \
+             the pools-manager loop will run. Ensure the batch-tx builder is \
+             actually implemented before handling real user funds."
+        );
+    } else {
+        tracing::warn!(
+            "FARM_PROCESSING_ENABLED is not set — farm intent submissions \
+             will be refused with HTTP 503 and the pools-manager loop is \
+             inactive. This is the safe default (HIGH-FM-3)."
+        );
+    }
+
     let config_ref = api_common::context::EnvConfigRef::new(
         config.ckb_rpc_url.clone(),
         config.ckb_indexer_url.clone(),
@@ -79,6 +103,7 @@ async fn main() -> anyhow::Result<()> {
         config.slack_webhook.clone(),
         admin_addresses,
         admin_pubkeys,
+        farm_processing_enabled,
     );
     let ctx = api_common::context::AppContext::new(db, redis_pool, config_ref);
 
