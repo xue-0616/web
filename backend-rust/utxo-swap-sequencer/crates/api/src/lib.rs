@@ -32,6 +32,16 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
         jwt_secret.len()
     );
 
+    // Plain `/health` outside the /api/v1 scope so the Dockerfile
+    // HEALTHCHECK and `scripts/guardrail-smoke.sh`'s `service_up`
+    // probe both have a stable, auth-free, version-free endpoint to
+    // hit. Intentionally returns an empty 200 with no body — if you
+    // need dep details use /readyz (TODO) or /api/v1/status.
+    cfg.route(
+        "/health",
+        web::get().to(|| async { actix_web::HttpResponse::Ok().finish() }),
+    );
+
     cfg.service(
         web::scope("/api/v1")
             // === PUBLIC ENDPOINTS (no auth required) ===

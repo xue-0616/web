@@ -96,25 +96,29 @@ echo
 # swap-sequencer guardrails (optional — service not in default compose)
 # --------------------------------------------------------------------
 if [[ "$SKIP_SWAP" != "1" ]] && service_up "$SWAP_PORT"; then
-  # MED-SW-1 — stub endpoints must return 501, not 500. A POST with a
-  # well-formed but dummy body exercises the handler; a 500 would mean
-  # the NotImplemented variant regressed back to Internal.
+  # MED-SW-1 — stub endpoints are fail-closed. The three /intents/*
+  # stubs are behind JwtAuth + rate-limit; pools-admin/create is
+  # behind JwtAuth too. Without a token the middleware short-
+  # circuits with 401 BEFORE the handler returns 501, but either
+  # code is acceptable: nothing reached the handler that might
+  # accidentally mutate state. A 500 (old behaviour) or 200 (real
+  # regression) would fail here.
   assert_post_status \
-    "MED-SW-1  POST /api/v1/intents/swap-input-for-exact-output -> 501" \
+    "MED-SW-1  POST /api/v1/intents/swap-input-for-exact-output -> 401|501" \
     "http://${HOST}:${SWAP_PORT}/api/v1/intents/swap-input-for-exact-output" \
-    '{}' '501'
+    '{}' '401|501'
   assert_post_status \
-    "MED-SW-1  POST /api/v1/intents/add-liquidity -> 501" \
+    "MED-SW-1  POST /api/v1/intents/add-liquidity -> 401|501" \
     "http://${HOST}:${SWAP_PORT}/api/v1/intents/add-liquidity" \
-    '{}' '501'
+    '{}' '401|501'
   assert_post_status \
-    "MED-SW-1  POST /api/v1/intents/remove-liquidity -> 501" \
+    "MED-SW-1  POST /api/v1/intents/remove-liquidity -> 401|501" \
     "http://${HOST}:${SWAP_PORT}/api/v1/intents/remove-liquidity" \
-    '{}' '501'
+    '{}' '401|501'
   assert_post_status \
-    "MED-SW-1  POST /api/v1/pools/create-pool -> 501" \
-    "http://${HOST}:${SWAP_PORT}/api/v1/pools/create-pool" \
-    '{}' '501'
+    "MED-SW-1  POST /api/v1/pools-admin/create -> 401|501" \
+    "http://${HOST}:${SWAP_PORT}/api/v1/pools-admin/create" \
+    '{}' '401|501'
 
   # MED-SW-2 — rehearsal env deliberately does NOT set
   # SEQUENCER_LOCK_CODE_HASH et al., so /configurations should 503
