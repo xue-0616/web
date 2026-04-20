@@ -1,0 +1,155 @@
+# unipass-wallet-relayer — EVM meta-tx relay API + Redis stream
+# consumer.
+#
+# replicas=2: the submit API is stateless and benefits from HA.
+# The consumer loop is currently an XLEN observer (fail-loud
+# stub); when MED-RL-3 part 3 lands it will use per-pod Redis
+# consumer names for XREADGROUP so both replicas drain without
+# duplicating work.
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: relayer-config
+  namespace: huehub-backend
+data:
+  # Fail-closed.  Flip to "true" only after a real TxBroadcaster
+  # impl lands (MED-RL-3).  See docs/scaffold-design.md.
+  RELAYER_CONSUMER_ENABLED: "false"
+  RUST_LOG: "info,sqlx=warn"
+  # Per-chain RPC URLs.  Referenced by the HIGH-RL-1 chain-id
+  # -> URL map; missing entries cause 503 on /transactions/relay
+  # for that chain_id.  Format: JSON { "1": "https://...",
+  # "137": "https://..." }
+  ETH_RPC_URLS_JSON: '{}'
+  # CORS — same pattern as farm-sequencer.
+  CORS_ALLOWED_ORIGINS: "https://app.example.com"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: relayer
+  namespace: huehub-backend
+  labels:
+    app: relayer
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # With 2 replicas we keep service during rollout.
+      maxSurge: 1
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: relayer
+  template:
+    metadata:
+      labels:
+        app: relayer
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      # Spread across nodes so a single node failure doesn't
+      # take both replicas.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: relayer
+      containers:
+        - name: relayer
+          image: ghcr.io/huehub/unipass-wallet-relayer:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            # Pod name becomes the Redis consumer id when
+            # MED-RL-3 part 3 wires XREADGROUP.  The scaffold
+            # doesn't read this yet, but setting it now means
+            # the rollout of the real consumer won't need a
+            # Deployment change.
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          envFrom:
+            - configMapRef:
+                name: relayer-config
+            - secretRef:
+                name: relayer-secrets
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: relayer
+  namespace: huehub-backend
+  labels:
+    app: relayer
+spec:
+  type: ClusterIP
+  selector:
+    app: relayer
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: relayer
+  namespace: huehub-backend
+spec:
+  # 2 replicas → keep at least 1 available during voluntary
+  # disruptions (node drains, autoscaler evictions).
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: relayer

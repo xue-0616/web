@@ -1,0 +1,54 @@
+# Prometheus Operator ServiceMonitor resources.
+#
+# If your cluster runs kube-prometheus-stack / Prometheus
+# Operator, these make the /metrics endpoints discoverable
+# without touching the central Prometheus configuration.
+#
+# Without the Operator, use the `prometheus.io/scrape: "true"`
+# pod annotations on the Deployments instead.
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: farm-sequencer
+  namespace: huehub-backend
+  labels:
+    # Must match the Prometheus CR's serviceMonitorSelector
+    # (kube-prometheus-stack's default is `release: prometheus`).
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: farm-sequencer
+  namespaceSelector:
+    matchNames:
+      - huehub-backend
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      # The `up` metric from this ServiceMonitor drives the
+      # generic ServiceDown alert in deploy/prometheus/alerts.yml.
+      scrapeTimeout: 10s
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: relayer
+  namespace: huehub-backend
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: relayer
+  namespaceSelector:
+    matchNames:
+      - huehub-backend
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s

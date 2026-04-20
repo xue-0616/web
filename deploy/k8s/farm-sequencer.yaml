@@ -1,0 +1,154 @@
+# farm-sequencer — CKB pools manager + intent submit API.
+#
+# replicas=1 by design.  See deploy/k8s/README.md §Design choices
+# for why.  The FarmClaimRaceChronic alert keeps us honest if
+# someone bumps this.
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: farm-sequencer-config
+  namespace: huehub-backend
+data:
+  # Fail-closed by default.  Flip to "true" only after a real
+  # BatchTxBuilder impl lands (HIGH-FM-3) and integration-smoke
+  # confirms end-to-end drain.  See docs/scaffold-design.md.
+  FARM_PROCESSING_ENABLED: "false"
+  RUST_LOG: "info,sqlx=warn"
+  # Maximum rows claimed per batch tick.  50 is the scaffold-
+  # tested default; raising it should be paired with a widening
+  # of the FarmBatchBuildSlow threshold in alerts.yml.
+  FARM_MAX_BATCH_SIZE: "50"
+  # The 5 deployment hashes.  Filled from the actual on-chain
+  # contract cells via your deploy pipeline; the service returns
+  # 503 on /api/v1/configurations if any is unset.
+  SEQUENCER_LOCK_CODE_HASH: ""
+  SEQUENCER_LOCK_ARGS: ""
+  # CORS — comma-separated list of frontend origins.  The
+  # service rejects unknown Origins with a 403.
+  CORS_ALLOWED_ORIGINS: "https://app.example.com"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: farm-sequencer
+  namespace: huehub-backend
+  labels:
+    app: farm-sequencer
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # With a single replica we accept a brief gap during
+      # rollout.  The Ingress + /readyz coordination means the
+      # old pod drains before the new one starts serving.
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: farm-sequencer
+  template:
+    metadata:
+      labels:
+        app: farm-sequencer
+      annotations:
+        # Prometheus scrape hints (for clusters without the
+        # Prometheus Operator; servicemonitor.yaml is preferred).
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      # Non-root, read-only FS; matches PSA restricted.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: farm-sequencer
+          # NOTE: change registry to match your publish target.
+          image: ghcr.io/huehub/utxoswap-farm-sequencer:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: farm-sequencer-config
+            - secretRef:
+                name: farm-sequencer-secrets
+          readinessProbe:
+            # Aggregates DB + Redis health — 503 removes the pod
+            # from the Service's endpoint list, draining traffic
+            # cleanly during an upstream outage.
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            # Cheap process-alive check.  We never restart on
+            # readiness failure (that'd kill the pod during a
+            # transient DB blip), only on liveness failure.
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              # No CPU limit — tokio throttling hurts here.
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: farm-sequencer
+  namespace: huehub-backend
+  labels:
+    app: farm-sequencer
+spec:
+  type: ClusterIP
+  selector:
+    app: farm-sequencer
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: farm-sequencer
+  namespace: huehub-backend
+spec:
+  # Single replica — minAvailable: 0 lets node drains proceed
+  # by killing the pod and waiting for the scheduler to place
+  # a new one.  The rolling update above keeps rollout-initiated
+  # downtime to ~10s.
+  minAvailable: 0
+  selector:
+    matchLabels:
+      app: farm-sequencer
