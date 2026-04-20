@@ -1,0 +1,136 @@
+name: integration-smoke
+
+# Spins up the three audited Rust services + MySQL + Redis via
+# docker-compose.integration.yml and runs `scripts/guardrail-smoke.sh`
+# to verify the fail-closed HTTP contract documented in
+# docs/deployment-rehearsal.md §4a / §4b.
+#
+# Gate scope:
+#   * changes to any of the three Rust services the smoke touches
+#     (swap-seq, farm-seq, relayer)
+#   * changes to the compose file or the smoke script itself
+#   * changes to this workflow
+# Unit tests are gated separately by rust-tests.yml; this job's
+# purpose is ROUTING / middleware-ordering / error-mapping
+# verification in a live stack, which no unit test can provide.
+#
+# Wall-clock budget: first run is ~10-12 min (Rust compile
+# dominates); cached runs land in ~3-4 min thanks to
+# Swatinem/rust-cache + BuildKit cache mounts baked into
+# Dockerfile.rust-service.
+
+on:
+  pull_request:
+    paths:
+      - 'backend-rust/unipass-wallet-relayer/**'
+      - 'backend-rust/utxoswap-farm-sequencer/**'
+      - 'backend-rust/utxo-swap-sequencer/**'
+      - 'backend-rust/Dockerfile.rust-service'
+      - 'docker-compose.integration.yml'
+      - 'scripts/guardrail-smoke.sh'
+      - '.github/workflows/integration-smoke.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend-rust/unipass-wallet-relayer/**'
+      - 'backend-rust/utxoswap-farm-sequencer/**'
+      - 'backend-rust/utxo-swap-sequencer/**'
+      - 'backend-rust/Dockerfile.rust-service'
+      - 'docker-compose.integration.yml'
+      - 'scripts/guardrail-smoke.sh'
+      - '.github/workflows/integration-smoke.yml'
+
+jobs:
+  guardrail-smoke:
+    name: guardrail smoke (compose + HTTP contract)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker BuildKit
+        uses: docker/setup-buildx-action@v3
+
+      # Generate a minimal .env.integration. Every value is a
+      # throwaway — this stack is ephemeral per-job. We're NOT
+      # using real secrets; compose has ${VAR:?err} requires on a
+      # handful of fields and this block satisfies them.
+      - name: Write throwaway .env.integration
+        run: |
+          cat > .env.integration <<'ENV'
+          MYSQL_ROOT_PASSWORD=ci-mysql-root
+          MYSQL_PASSWORD=ci-mysql
+          MYSQL_USER=integration
+          MYSQL_DATABASE=integration
+          JWT_SECRET=ci-test-jwt-secret-at-least-32-bytes-long-xxxxxxxxxx
+          KEYBLOB_ENCRYPTION_KEY=ci-keyblob-key-exactly-32-bytes-len
+          RELAYER_PRIVATE_KEY=0000000000000000000000000000000000000000000000000000000000000001
+          RELAYER_API_KEY=ci-relayer-key-at-least-32-bytes-long-xxxxxxxx
+          FARM_API_KEY=ci-farm-key-at-least-32-bytes-long-xxxxxxxxxxxx
+          DISTRIBUTOR_API_KEY=ci-dist-key-at-least-32-bytes-long-xxxxxxxxxx
+          ENV
+
+      # Build only the three Rust services smoke touches + their
+      # infra deps. The Node services, btc-assets-api, and the
+      # distributor are not on the smoke path and would add
+      # ~4-5 min of build time each.
+      - name: Build + start stack (swap-seq, farm-seq, relayer + infra)
+        run: |
+          docker compose -f docker-compose.integration.yml \
+            --env-file .env.integration \
+            up --build -d \
+            mysql redis \
+            utxo-swap-sequencer \
+            utxoswap-farm-sequencer \
+            unipass-wallet-relayer
+
+      # Poll every service until healthy or 120 s. The compose
+      # healthchecks already sleep 5-30 s between probes; this
+      # outer loop just provides a deterministic timeout so a
+      # stuck service doesn't consume the full 25 min budget.
+      - name: Wait for all services healthy
+        run: |
+          set -u
+          deadline=$(( $(date +%s) + 120 ))
+          services="utxo-swap-sequencer utxoswap-farm-sequencer unipass-wallet-relayer mysql redis"
+          while :; do
+            all_healthy=1
+            for s in $services; do
+              state=$(docker inspect --format '{{.State.Health.Status}}' \
+                "up-rebuild-integration-${s}-1" 2>/dev/null || echo missing)
+              case "$state" in
+                healthy) ;;
+                *) all_healthy=0; echo "  $s -> $state" ;;
+              esac
+            done
+            if [ "$all_healthy" = "1" ]; then
+              echo "all 5 services healthy"
+              break
+            fi
+            if [ "$(date +%s)" -gt "$deadline" ]; then
+              echo "timeout waiting for services; dumping logs" >&2
+              exit 1
+            fi
+            sleep 3
+          done
+
+      - name: Run guardrail smoke
+        run: bash scripts/guardrail-smoke.sh
+
+      # Always dump logs on failure so a CI-only regression is
+      # debuggable without a local repro attempt. The `if:
+      # failure()` guard keeps green runs quiet.
+      - name: Dump service logs on failure
+        if: failure()
+        run: |
+          for s in utxo-swap-sequencer utxoswap-farm-sequencer unipass-wallet-relayer mysql redis; do
+            echo "================ $s ================"
+            docker compose -f docker-compose.integration.yml \
+              --env-file .env.integration logs --no-color --tail=200 "$s" || true
+          done
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker compose -f docker-compose.integration.yml \
+            --env-file .env.integration down -v || true
