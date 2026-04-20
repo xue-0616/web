@@ -208,6 +208,15 @@ jobs:
         # (HIGH-FM-3). Also transitively exercises the ApiError
         # ServiceUnavailable (503) mapping added in this pass.
         run: cargo test -p api --lib intents::submit::tests
+      - name: test intent-solver (CRIT-FM-2 per-user running state)
+        # 4 new regression tests gating the fix for 'deposit rewards
+        # calculated with stale user state within same batch':
+        #   * two deposits from same user -> second sees zeroed debt
+        #   * deposit-then-harvest -> harvest sees zero pending
+        #   * distinct users stay independent
+        #   * running stake prevents same-batch overdraw
+        # Plus the 9 preexisting solver unit tests.
+        run: cargo test -p intent-solver
 
   huehub-token-distributor-purefuncs:
     # Gates the pure-function test suites added in the BUG-P3

@@ -47,14 +47,60 @@ pub fn update_pool(pool: &mut FarmPoolState, current_time: u64) {
     pool.last_reward_time = end;
 }
 
-/// Solve a batch of farm intents
+/// A user's running position, threaded through the batch.
+///
+/// CRIT-FM-2: the previous implementation read `user_staked_amount`
+/// and `user_reward_debt` directly off every intent. Those two
+/// fields come from the user's on-chain cell and describe the
+/// user's state BEFORE the batch started; re-reading them for every
+/// intent meant that two intents from the same user in the same
+/// batch both saw the pre-batch snapshot. A deposit-then-harvest
+/// from the same user would pay out `pending(old_staked, acc, old_debt)`
+/// twice — once for the deposit's implicit claim and again for the
+/// explicit harvest — because the deposit never updated the
+/// harvest's view of the user's reward_debt.
+///
+/// `UserPosition` threads the running (staked, reward_debt) pair
+/// through every intent in `solve_batch`, keyed on the user's
+/// lock_hash. The first intent for a given lock_hash seeds the
+/// entry from that intent's on-chain snapshot; subsequent intents
+/// read and write the running values.
+#[derive(Clone, Copy)]
+struct UserPosition {
+    staked: u128,
+    reward_debt: u128,
+}
+
+impl UserPosition {
+    fn new_debt(&self, acc_reward_per_share: u128) -> u128 {
+        // MasterChef invariant: after any deposit / withdraw /
+        // harvest settles a user's pending reward, their debt is
+        // reset to their current stake × current accumulator so
+        // the next pending calculation subtracts the exact amount
+        // already paid out.
+        self.staked
+            .saturating_mul(acc_reward_per_share)
+            / common::PRECISION_FACTOR
+    }
+}
+
+/// Solve a batch of farm intents.
+///
+/// See `UserPosition` for the rationale behind the per-user running
+/// state. The pool-level `state.total_staked` is also updated
+/// in-loop so pool-level reward accrual during this batch is
+/// consistent with each intent's order of execution.
 pub fn solve_batch(
     intents: &[(u64, ParsedFarmIntent)],
     pool: &FarmPoolState,
     current_time: u64,
 ) -> FarmSolverResult {
+    use std::collections::HashMap;
+
     let mut state = pool.clone();
     update_pool(&mut state, current_time);
+
+    let mut positions: HashMap<[u8; 32], UserPosition> = HashMap::new();
 
     let mut result = FarmSolverResult {
         deposit_events: Vec::new(),
@@ -65,14 +111,25 @@ pub fn solve_batch(
     };
 
     for (id, intent) in intents {
+        // Look up this user's running position. The first time
+        // we see the user in this batch, seed from their on-chain
+        // snapshot; every subsequent intent for them reads and
+        // updates the cached values.
+        let pos = positions.entry(intent.lock_hash).or_insert(UserPosition {
+            staked: intent.user_staked_amount,
+            reward_debt: intent.user_reward_debt,
+        });
+
         match intent.intent_type {
             FarmIntentType::Deposit => {
                 let pending = pending_reward(
-                    intent.user_staked_amount,
+                    pos.staked,
                     state.acc_reward_per_share,
-                    intent.user_reward_debt,
+                    pos.reward_debt,
                 );
-                state.total_staked += intent.amount;
+                pos.staked = pos.staked.saturating_add(intent.amount);
+                pos.reward_debt = pos.new_debt(state.acc_reward_per_share);
+                state.total_staked = state.total_staked.saturating_add(intent.amount);
                 result.deposit_events.push(types::DepositEvent {
                     intent_id: *id,
                     farm_type_hash: intent.farm_type_hash,
@@ -81,15 +138,17 @@ pub fn solve_batch(
                 });
             }
             FarmIntentType::Withdraw => {
-                if intent.amount > intent.user_staked_amount {
+                if intent.amount > pos.staked {
                     result.refunded.push((*id, "Insufficient staked".to_string()));
                     continue;
                 }
                 let pending = pending_reward(
-                    intent.user_staked_amount,
+                    pos.staked,
                     state.acc_reward_per_share,
-                    intent.user_reward_debt,
+                    pos.reward_debt,
                 );
+                pos.staked = pos.staked.saturating_sub(intent.amount);
+                pos.reward_debt = pos.new_debt(state.acc_reward_per_share);
                 state.total_staked = state.total_staked.saturating_sub(intent.amount);
                 result.withdraw_events.push(types::WithdrawEvent {
                     intent_id: *id,
@@ -100,10 +159,11 @@ pub fn solve_batch(
             }
             FarmIntentType::Harvest => {
                 let pending = pending_reward(
-                    intent.user_staked_amount,
+                    pos.staked,
                     state.acc_reward_per_share,
-                    intent.user_reward_debt,
+                    pos.reward_debt,
                 );
+                pos.reward_debt = pos.new_debt(state.acc_reward_per_share);
                 result.harvest_events.push(types::HarvestEvent {
                     intent_id: *id,
                     farm_type_hash: intent.farm_type_hash,
@@ -111,16 +171,21 @@ pub fn solve_batch(
                 });
             }
             FarmIntentType::WithdrawAndHarvest => {
-                if intent.amount > intent.user_staked_amount {
+                if intent.amount > pos.staked {
                     result.refunded.push((*id, "Insufficient staked".to_string()));
                     continue;
                 }
                 let pending = pending_reward(
-                    intent.user_staked_amount,
+                    pos.staked,
                     state.acc_reward_per_share,
-                    intent.user_reward_debt,
+                    pos.reward_debt,
                 );
+                pos.staked = pos.staked.saturating_sub(intent.amount);
+                pos.reward_debt = pos.new_debt(state.acc_reward_per_share);
                 state.total_staked = state.total_staked.saturating_sub(intent.amount);
+                // Emit a WithdrawEvent carrying the pending reward;
+                // the reward-emitting CKB transaction uses the
+                // pending_reward field exactly as for a Harvest.
                 result.withdraw_events.push(types::WithdrawEvent {
                     intent_id: *id,
                     farm_type_hash: intent.farm_type_hash,
@@ -146,6 +211,129 @@ mod tests {
     fn test_pending_reward() {
         assert_eq!(pending_reward(1000, 1_000_000_000_000, 0), 1000);
         assert_eq!(pending_reward(1000, 2_000_000_000_000, 500), 1500);
+    }
+
+    /// Build a minimal ParsedFarmIntent for the stake-state tests.
+    /// Only the fields solve_batch reads are set to non-default.
+    fn mk_intent(
+        kind: FarmIntentType,
+        lock: [u8; 32],
+        amount: u128,
+        user_staked: u128,
+        user_debt: u128,
+    ) -> ParsedFarmIntent {
+        ParsedFarmIntent {
+            intent_type: kind,
+            farm_type_hash: [1u8; 32],
+            amount,
+            lock_hash: lock,
+            user_staked_amount: user_staked,
+            user_reward_debt: user_debt,
+        }
+    }
+
+    fn mk_pool() -> FarmPoolState {
+        FarmPoolState {
+            farm_type_hash: [1u8; 32],
+            pool_type_hash: [2u8; 32],
+            reward_token_type_hash: [3u8; 32],
+            lp_token_type_hash: [4u8; 32],
+            total_staked: 1000,
+            reward_per_second: 0,       // no time-based accrual in these tests
+            acc_reward_per_share: 2 * common::PRECISION_FACTOR,
+            last_reward_time: 100,
+            start_time: 0,
+            end_time: 10_000,
+        }
+    }
+
+    /// CRIT-FM-2 regression: two deposits from the same user in one
+    /// batch must NOT both claim the pre-batch pending reward. The
+    /// first deposit settles it; the second sees a zeroed debt
+    /// relative to the settled position.
+    #[test]
+    fn crit_fm_2_same_user_two_deposits_does_not_double_pay() {
+        let pool = mk_pool();
+        let user = [9u8; 32];
+
+        // User has 1000 staked, debt 0. acc = 2e12/1e12 = 2.
+        // Pre-batch pending = 1000 * 2 - 0 = 2000.
+        let i1 = mk_intent(FarmIntentType::Deposit, user, 500, 1000, 0);
+        let i2 = mk_intent(FarmIntentType::Deposit, user, 500, 1000, 0);
+
+        let r = solve_batch(&[(1, i1), (2, i2)], &pool, 100);
+
+        assert_eq!(r.deposit_events.len(), 2);
+        assert_eq!(
+            r.deposit_events[0].pending_reward, 2000,
+            "first deposit claims the full pre-batch pending"
+        );
+        assert_eq!(
+            r.deposit_events[1].pending_reward, 0,
+            "second deposit must see debt already settled; was {} before the CRIT-FM-2 fix",
+            r.deposit_events[1].pending_reward
+        );
+    }
+
+    /// CRIT-FM-2 regression: deposit-then-harvest from the same user
+    /// in one batch must settle rewards exactly once. Under the bug
+    /// the harvest re-claimed the same pending.
+    #[test]
+    fn crit_fm_2_deposit_then_harvest_settles_once() {
+        let pool = mk_pool();
+        let user = [7u8; 32];
+
+        let dep = mk_intent(FarmIntentType::Deposit, user, 100, 1000, 0);
+        let harv = mk_intent(FarmIntentType::Harvest, user, 0, 1000, 0);
+
+        let r = solve_batch(&[(1, dep), (2, harv)], &pool, 100);
+
+        assert_eq!(r.deposit_events[0].pending_reward, 2000,
+            "deposit absorbs the pre-batch pending");
+        assert_eq!(r.harvest_events[0].reward_amount, 0,
+            "harvest after same-user deposit in same batch must see zero pending");
+    }
+
+    /// CRIT-FM-2 regression: distinct users in the same batch are
+    /// independent. Two users each doing a deposit should each get
+    /// their own pre-batch pending, not share it.
+    #[test]
+    fn crit_fm_2_distinct_users_are_independent() {
+        let pool = mk_pool();
+        let alice = [1u8; 32];
+        let bob = [2u8; 32];
+
+        let a = mk_intent(FarmIntentType::Deposit, alice, 100, 1000, 0);
+        let b = mk_intent(FarmIntentType::Deposit, bob, 100, 500, 0);
+
+        let r = solve_batch(&[(1, a), (2, b)], &pool, 100);
+
+        // Alice: 1000 * 2 - 0 = 2000
+        // Bob:   500  * 2 - 0 = 1000
+        assert_eq!(r.deposit_events[0].pending_reward, 2000);
+        assert_eq!(r.deposit_events[1].pending_reward, 1000);
+    }
+
+    /// CRIT-FM-2 regression: withdraw-then-withdraw from the same
+    /// user must track the running stake, not the pre-batch stake.
+    /// Before the fix, a user with 1000 staked could "withdraw 800"
+    /// twice because each intent saw stake=1000.
+    #[test]
+    fn crit_fm_2_running_stake_prevents_overdraw() {
+        let pool = mk_pool();
+        let user = [5u8; 32];
+
+        let w1 = mk_intent(FarmIntentType::Withdraw, user, 800, 1000, 0);
+        let w2 = mk_intent(FarmIntentType::Withdraw, user, 800, 1000, 0);
+
+        let r = solve_batch(&[(1, w1), (2, w2)], &pool, 100);
+
+        assert_eq!(r.withdraw_events.len(), 1,
+            "first withdraw succeeds against running stake 1000");
+        assert_eq!(r.refunded.len(), 1,
+            "second withdraw (800 > running stake 200) must be refunded, \
+             not silently executed");
+        assert_eq!(r.refunded[0].0, 2, "refund is for intent 2");
     }
 
     #[test]
