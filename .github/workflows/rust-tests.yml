@@ -147,14 +147,22 @@ jobs:
         # Runs without external services (all tests use in-memory
         # fakes); no Redis / RPC sidecar needed in CI.
         run: cargo test -p relayer --lib
-      - name: test relayer MED round (RL-2 / RL-3 / RL-4)
-        # 10 new tests across three service-plane leaf crates:
+      - name: test relayer MED round + MED-RL-3 scaffold
+        # Combined gate for:
         #   - tokens-manager (3) — MED-RL-2: CoinGecko response
         #     actually populates self.prices; id lookup is
         #     case-insensitive; new() starts empty.
-        #   - relayer-redis (3) — MED-RL-3: `RELAYER_CONSUMER_ENABLED`
-        #     env gate; falsy/garbage/default all keep the
-        #     consumer in fail-loud stub mode.
+        #   - relayer-redis (17) — all of:
+        #       * MED-RL-3 env gate (3): `RELAYER_CONSUMER_ENABLED`
+        #         falsy/garbage/default all keep the consumer in
+        #         fail-loud stub mode.
+        #       * MED-RL-3 scaffold (8): broadcaster::tests
+        #         covering parse_stream_entry happy path +
+        #         6 InvalidInput rejections + NoopTxBroadcaster.
+        #       * MED-RL-3 scaffold part 2 (6): process_entries
+        #         classification; most load-bearing is
+        #         `transient_yields_retain_not_ack` which pins
+        #         the "never silently XACK a timed-out tx" invariant.
         #   - configs (4) — MED-RL-4: Apollo override allow-list;
         #     reserved secret fields refuse override;
         #     case-insensitive; garbage port value rejected.
@@ -259,6 +267,21 @@ jobs:
         #   * running stake prevents same-batch overdraw
         # Plus the 9 preexisting solver unit tests.
         run: cargo test -p intent-solver
+      - name: test pools_manager scaffold (HIGH-FM-3 rounds 9.1-9.3)
+        # Gates the three scaffold modules landed in rounds 9.1-9.3:
+        #   * batch_tx_builder::tests (8) — select_next_batch FIFO /
+        #     dedup / cap invariants + NoopBatchTxBuilder behaviour.
+        #     A regression here would let two workers claim the same
+        #     intent cells (double-spend) or let malformed candidates
+        #     into the batch.
+        #   * intent_state_machine::tests (5) — SQL-shape assertions
+        #     on claim / release / mark_failed / mark_completed.
+        #     The `all_four_statements_filter_by_status_not_just_id`
+        #     test is the load-bearing one: it fails loudly if any
+        #     future edit drops the `WHERE status = <expected>`
+        #     guard from a transition, which is the one thing that
+        #     can re-enable double-claim at the DB layer.
+        run: cargo test -p utils pools_manager
 
   huehub-token-distributor-purefuncs:
     # Gates the pure-function test suites added in the BUG-P3
