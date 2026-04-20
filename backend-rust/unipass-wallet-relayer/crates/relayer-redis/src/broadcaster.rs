@@ -201,6 +201,67 @@ pub fn parse_stream_entry(
     })
 }
 
+/// Build the `(key, value)` pairs to XADD onto `TX_STREAM_KEY`.
+///
+/// Pure function so the producer side (the `POST /transactions/relay`
+/// handler) and the consumer side (`parse_stream_entry`) share one
+/// normalisation rule. The round-trip test below proves that
+/// whatever this builder emits, the parser accepts — a schema drift
+/// between producer and consumer would silently `InvalidInput` every
+/// user tx and XACK-Poison them to oblivion.
+///
+/// Canonicalisation:
+///   * `wallet_hex` is lower-cased. We accept case-insensitive input
+///     from the handler (ethers' Display for `Address` is
+///     ERC-55-checksummed, which mixes case) and normalise to lower
+///     so `parse_stream_entry`'s length check never trips on the
+///     weird "0X" prefix that some clients emit.
+///   * `calldata_hex` is likewise lower-cased.
+///   * `chain_id` is a decimal string.
+pub fn build_stream_fields(
+    chain_id: u64,
+    wallet_hex: &str,
+    calldata_hex: &str,
+) -> Vec<(String, String)> {
+    let wallet_lc = wallet_hex.to_ascii_lowercase();
+    let wallet = if wallet_lc.starts_with("0x") {
+        wallet_lc
+    } else {
+        format!("0x{wallet_lc}")
+    };
+    let cd_lc = calldata_hex.to_ascii_lowercase();
+    let calldata = if cd_lc.starts_with("0x") {
+        cd_lc
+    } else {
+        format!("0x{cd_lc}")
+    };
+    vec![
+        ("chain_id".into(), chain_id.to_string()),
+        ("wallet".into(), wallet),
+        ("calldata_hex".into(), calldata),
+    ]
+}
+
+/// XADD a validated meta-tx onto `TX_STREAM_KEY` and return the
+/// resulting stream id.
+///
+/// Thin wrapper around the Redis command; all the schema work is
+/// in `build_stream_fields`. Kept in this crate so the consumer
+/// half (next PR) can swap in the matching XREADGROUP without
+/// crossing crate boundaries.
+pub async fn push_to_stream(
+    conn: &mut deadpool_redis::Connection,
+    fields: &[(String, String)],
+) -> anyhow::Result<String> {
+    let mut cmd = redis::cmd("XADD");
+    cmd.arg(crate::TX_STREAM_KEY).arg("*");
+    for (k, v) in fields {
+        cmd.arg(k).arg(v);
+    }
+    let id: String = cmd.query_async(&mut **conn).await?;
+    Ok(id)
+}
+
 /// Why the consumer should XACK an entry.
 ///
 /// Both variants remove the entry from the PEL so the stream
@@ -523,6 +584,53 @@ mod tests {
             } => assert!(msg.contains("rpc timeout")),
             other => panic!("transient must map to Retain, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn build_stream_fields_round_trips_through_parse() {
+        // The load-bearing test for the producer/consumer schema
+        // contract. If anyone edits `build_stream_fields` without
+        // also updating `parse_stream_entry` (or vice versa) this
+        // test is what catches it — the XADDed message must be
+        // parseable back into the same (chain_id, wallet,
+        // calldata) tuple.
+        let fields = build_stream_fields(
+            137,
+            "0xABCDEFabcdefABCDEFabcdefABCDEFabcdef0011",
+            "0xDEADBEEF",
+        );
+        let parsed = parse_stream_entry("dummy-id-0", &fields).unwrap();
+        assert_eq!(parsed.chain_id, 137);
+        assert_eq!(parsed.wallet, "0xabcdefabcdefabcdefabcdefabcdefabcdef0011");
+        assert_eq!(parsed.calldata_hex, "0xdeadbeef");
+        assert_eq!(parsed.stream_id, "dummy-id-0");
+    }
+
+    #[test]
+    fn build_stream_fields_normalises_missing_0x_prefix() {
+        // Defensively accept either "0xAB…" or "AB…" on input.
+        // parse_stream_entry is strict about the prefix, so the
+        // builder MUST ensure it's there.
+        let fields = build_stream_fields(1, "1111111111111111111111111111111111111111", "beef");
+        let parsed = parse_stream_entry("x", &fields).unwrap();
+        assert_eq!(parsed.wallet, "0x1111111111111111111111111111111111111111");
+        assert_eq!(parsed.calldata_hex, "0xbeef");
+    }
+
+    #[test]
+    fn build_stream_fields_lowercases_erc55_input() {
+        // ethers' Address Display produces ERC-55-checksum casing
+        // (mixed case). parse_stream_entry's length check is fine
+        // with mixed case, but we canonicalise for consistent
+        // log strings and future case-sensitive consumers.
+        let fields = build_stream_fields(
+            1,
+            "0xDeAdBeEfDeAdBeEfDeAdBeEfDeAdBeEfDeAdBeEf",
+            "0xCAFEBABE",
+        );
+        let parsed = parse_stream_entry("x", &fields).unwrap();
+        assert_eq!(parsed.wallet, "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef");
+        assert_eq!(parsed.calldata_hex, "0xcafebabe");
     }
 
     #[tokio::test]

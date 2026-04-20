@@ -3653,6 +3653,7 @@ dependencies = [
  "ethers",
  "execute-validator",
  "hex",
+ "relayer-redis",
  "sea-orm",
  "serde",
  "serde_json",

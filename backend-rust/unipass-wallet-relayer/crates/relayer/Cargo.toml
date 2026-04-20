@@ -21,6 +21,9 @@ daos-relayer = { path = "../daos-relayer" }
 execute-validator = { path = "../execute-validator" }
 contracts-abi = { path = "../contracts-abi" }
 configs = { path = "../configs" }
+# Needed for broadcaster::{build_stream_fields, push_to_stream}
+# used by the POST /transactions/relay XADD push.
+relayer-redis = { path = "../relayer-redis" }
 
 [features]
 # Enables `InMemoryReplayCache` for downstream integration tests that

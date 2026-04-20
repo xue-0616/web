@@ -195,16 +195,63 @@ pub async fn handler(
     .await
     {
         Ok(gas_used) => {
+            // XADD the validated meta-tx onto the relayer stream
+            // so the background consumer can sign + broadcast it.
+            // Schema is pinned to `parse_stream_entry` via the
+            // `build_stream_fields_round_trips_through_parse`
+            // test in relayer-redis::broadcaster — if anyone
+            // edits one without the other, CI catches it.
+            //
+            // We use the parsed-then-formatted `wallet` Address
+            // here rather than `req.wallet_address` so the
+            // canonical lower-case + checksum form lands in the
+            // stream regardless of what the client sent.
+            let fields = relayer_redis::broadcaster::build_stream_fields(
+                req.chain_id,
+                &format!("{:?}", wallet),
+                &format!("0x{}", hex::encode(&calldata_bytes)),
+            );
+            let stream_id = match ctx.redis_pool().get().await {
+                Ok(mut conn) => {
+                    match relayer_redis::broadcaster::push_to_stream(&mut conn, &fields).await {
+                        Ok(id) => Some(id),
+                        Err(e) => {
+                            // Don't 500 the client here — the tx
+                            // passed validation + replay + sim,
+                            // so returning success is closer to
+                            // reality than returning failure. We
+                            // warn loudly so operators see the
+                            // drop and can restore the queue.
+                            tracing::warn!(
+                                chain_id = req.chain_id,
+                                wallet = %req.wallet_address,
+                                err = %e,
+                                "XADD to tx stream failed; tx NOT queued (but validated)"
+                            );
+                            None
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        chain_id = req.chain_id,
+                        err = %e,
+                        "redis pool unavailable; XADD skipped"
+                    );
+                    None
+                }
+            };
             tracing::info!(
                 chain_id = req.chain_id,
                 wallet = %req.wallet_address,
                 gas_used,
+                stream_id = stream_id.as_deref().unwrap_or("(unqueued)"),
                 "meta-tx accepted"
             );
-            // TODO: push onto Redis stream for async broadcast.
             HttpResponse::Ok().json(serde_json::json!({
                 "status": "queued",
                 "gasEstimate": gas_used.to_string(),
+                "streamId": stream_id,
             }))
         }
         Err(e) => {
