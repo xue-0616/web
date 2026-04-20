@@ -5,7 +5,7 @@ use serde::Deserialize;
 /// SECURITY: `relayer_private_key` is stored as a plain String here only for
 /// deserialization.  Callers MUST wrap it in `SecurePrivateKey` (see security module)
 /// immediately after loading, and remove the env var.
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Default)]
 pub struct RelayerConfig {
     #[serde(default = "default_port")]
     pub port: u16,

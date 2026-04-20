@@ -18,9 +18,9 @@ on:
     paths:
       - 'backend-rust/huehub-security-middleware/**'
       - 'backend-rust/huehub-observability/**'
-      - 'backend-rust/unipass-wallet-relayer/src/security.rs'
-      - 'backend-rust/utxoswap-farm-sequencer/src/security.rs'
-      - 'backend-rust/utxoswap-farm-sequencer/crates/types/src/parser.rs'
+      - 'backend-rust/unipass-wallet-relayer/**'
+      - 'backend-rust/utxoswap-farm-sequencer/**'
+      - 'backend-rust/utxo-swap-sequencer/**'
       - 'backend-rust/huehub-token-distributor/src/security.rs'
       - 'backend-rust/huehub-token-distributor/crates/distributor-types/src/lib.rs'
       - '.github/workflows/rust-tests.yml'
@@ -29,9 +29,9 @@ on:
     paths:
       - 'backend-rust/huehub-security-middleware/**'
       - 'backend-rust/huehub-observability/**'
-      - 'backend-rust/unipass-wallet-relayer/src/security.rs'
-      - 'backend-rust/utxoswap-farm-sequencer/src/security.rs'
-      - 'backend-rust/utxoswap-farm-sequencer/crates/types/src/parser.rs'
+      - 'backend-rust/unipass-wallet-relayer/**'
+      - 'backend-rust/utxoswap-farm-sequencer/**'
+      - 'backend-rust/utxo-swap-sequencer/**'
       - 'backend-rust/huehub-token-distributor/src/security.rs'
       - 'backend-rust/huehub-token-distributor/crates/distributor-types/src/lib.rs'
       - '.github/workflows/rust-tests.yml'
@@ -130,6 +130,49 @@ jobs:
         # and avoids pulling decompiled sibling crates into the
         # gating path.
         run: cargo test --bin unipass-wallet-relayer security::tests
+      - name: test execute-validator (BUG-P2-C2 / HIGH-RL-2 / HIGH-RL-3)
+        # 9 validator tests (inner-tx cap, delegate_call reject, gas
+        # limit, cumulative-value overflow) + 5 parser tests
+        # (malformed selector, data_len overflow, nonce/sig round-trip).
+        # Regression for the fix that replaced the tautological
+        # ecrecover check with real structural validation.
+        run: cargo test -p execute-validator --lib
+      - name: test relayer lib (BUG-P2-C2 pipeline + RPC client)
+        # 16 tests total:
+        #   - api::transactions (6) — handler-level, mocked simulator
+        #     covering happy path, replay, simulator revert, bad
+        #     selector, empty calldata, delegate_call early-reject
+        #   - replay (5) — Redis-backed nonce cache semantics
+        #   - api::rpc_client (5) — HIGH-RL-1 chain-id -> URL mapping
+        # Runs without external services (all tests use in-memory
+        # fakes); no Redis / RPC sidecar needed in CI.
+        run: cargo test -p relayer --lib
+
+  utxo-swap-sequencer-molecule:
+    # Gates the CRIT-SW-1 / CRIT-SW-2 regression tests added in the
+    # deep-audit remediation pass. The bug itself (reading molecule
+    # total_size as `version`, walking RawTransaction from the wrong
+    # base offset) was already fixed in source; these tests exist so
+    # nobody reintroduces it. 5 tests in crates/api/src/intents/
+    # swap_exact_input_for_output.rs::tests.
+    #
+    # We test just the api crate (cargo test -p api --lib intents::)
+    # because the rest of the swap-seq workspace still has some
+    # decompiled siblings (accounts/*, chains/*) whose compile status
+    # is tracked separately.
+    name: utxo-swap-sequencer (molecule parser regression)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend-rust/utxo-swap-sequencer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend-rust/utxo-swap-sequencer
+      - name: test molecule parser regression
+        run: cargo test -p api --lib intents::swap_exact_input_for_output::tests
 
   utxoswap-farm-sequencer-purefuncs:
     # Gates the two pure-function test suites added in the BUG-P1
@@ -159,6 +202,12 @@ jobs:
         run: cargo test -p types parser::tests
       - name: test security module (bin)
         run: cargo test --bin utxoswap-farm-sequencer security::tests
+      - name: test intent submission (HIGH-FM-1 / HIGH-FM-2 / HIGH-FM-3)
+        # 2 tests gating the intent_type/amount write-through fix
+        # and the Decimal conversion path for the fail-closed gate
+        # (HIGH-FM-3). Also transitively exercises the ApiError
+        # ServiceUnavailable (503) mapping added in this pass.
+        run: cargo test -p api --lib intents::submit::tests
 
   huehub-token-distributor-purefuncs:
     # Gates the pure-function test suites added in the BUG-P3

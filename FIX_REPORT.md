@@ -157,4 +157,92 @@ backend-python      ( 1 项): py_compile OK ✅
 ## 审计链路追踪
 
 - `FULL_AUDIT_REPORT.md` — 原始审计报告
+- `DEEP_AUDIT_SWAP_FARM_RELAYER.md` — swap/farm/relayer 深度二次审计
 - `FIX_REPORT.md` — 本次修复记录（本文件）
+- `docs/deployment-rehearsal.md` — 部署演练 + 未解决阻塞项清单
+
+---
+
+## 🔄 深度审计轮次（2026-04 后续修复）
+
+在 `FULL_AUDIT_REPORT.md` 之后进行了 `DEEP_AUDIT_SWAP_FARM_RELAYER.md`
+定义的二次审计。以下是这一轮的修复记录。
+
+### DR-1. [CRITICAL] BUG-P2-C2 — relayer 签名验证是恒等式
+
+**文件：**
+- 新增 `backend-rust/unipass-wallet-relayer/crates/execute-validator/src/validator.rs`
+- 新增 `backend-rust/unipass-wallet-relayer/crates/relayer/src/replay.rs`
+- 改写 `backend-rust/unipass-wallet-relayer/crates/relayer/src/api/transactions.rs`
+
+原实现 `ecrecover(keccak(calldata), sig) == body.wallet_address` 中
+`wallet_address` 由客户端给出，攻击者只要填入 recover 结果就必过。
+任何人拿一对 (calldata, sig) 就能让 relayer 替任意钱包广播任意
+execute 调用。
+
+**新 4 阶段管道：**
+1. 解码 `ModuleMain.execute(bytes, uint256, bytes)`
+2. 结构校验：≤32 inner tx、拒绝 delegate_call、gas 上限、cumulative-value 溢出检查
+3. Redis `SET NX EX` 抢占 `(chainId, wallet, nonce)` — replay 保护
+4. `eth_call` 到钱包合约让其 `_validateSignature` 做签名判断
+
+**测试：** `cargo test -p relayer -p execute-validator` **25 passed**。
+
+### DR-2. [CRITICAL] CRIT-SW-1 / CRIT-SW-2 — swap molecule 解析错位
+
+**文件：** `backend-rust/utxo-swap-sequencer/crates/api/src/intents/swap_exact_input_for_output.rs`
+
+`validate_transaction` 把 molecule `total_size` 当成 `version` 字段、
+`parse_intent_from_tx` 从错误的 raw_offset 驱动遍历。源码层的修复
+早先已应用（`// CRIT-SW-1 FIX:` 注释），但 **没有测试**。本轮补了
+5 个回归测试，含可复用的 `build_tx()` molecule 编码 helper，未来
+其他 intent handler 的测试可直接 reuse。
+
+### DR-3. [HIGH] HIGH-FM-1 / HIGH-FM-2 / HIGH-FM-3 — farm 三连环
+
+**文件：**
+- `crates/api-common/src/context.rs` — `EnvConfigRef.farm_processing_enabled`
+- `crates/api-common/src/error.rs` — `ApiError::ServiceUnavailable` (503)
+- `src/main.rs` — 解析 `FARM_PROCESSING_ENABLED`
+- `crates/utils/src/pools_manager/manager.rs` — 未启用时 loop 立即 return
+- `crates/api/src/intents/submit.rs` — 503 门 + 写入 `intent_type` / `amount`
+- `crates/api/src/intents/submit_create_pool_intent.rs` — 同上 503 门
+- `docker-compose.integration.yml` — 新环境变量注入
+
+原后台 loop 只打 debug log，用户 LP token 存入后永远卡在 `Pending`。
+修复用的是 **fail-closed** 门：`FARM_PROCESSING_ENABLED=false`（默认）
+时 submit 直接 503 拒绝，loop 跳过；真的 solver 落地后翻开关即可。
+同 commit 顺手修 HIGH-FM-1/2 — ActiveModel 用 `Default::default()`
+导致所有 intent 写成 Deposit(0)。
+
+### DR-4. [HIGH] HIGH-RL-1 — relayer 4 RPC handler 此前不编译
+
+已在更早轮次接入 `ethers`（`rpc_client.rs`）。本轮补了 5 个针对
+chain-id → URL 映射的回归测试，防止 chainId 常量被静默改错导致
+某条链的流量消失。
+
+### DR-5. [INFRA] CI 锁定
+
+`.github/workflows/rust-tests.yml` 新增/扩展：
+- `unipass-wallet-relayer-security` job 追加 `cargo test -p relayer --lib` 和 `-p execute-validator --lib`
+- 新增 `utxo-swap-sequencer-molecule` job
+- `utxoswap-farm-sequencer-purefuncs` job 追加 `cargo test -p api --lib intents::submit::tests`
+
+### 本轮测试账面
+
+| 包 | 增量 tests | 覆盖 |
+|----|------|------|
+| `relayer` lib | +16 | BUG-P2-C2 pipeline, replay, HIGH-RL-1 |
+| `execute-validator` lib | +14 | 结构校验 + 解析器 |
+| `utxo-swap-sequencer` api lib | +5 | CRIT-SW-1/2 molecule 回归 |
+| `utxoswap-farm-sequencer` api lib | +2 | HIGH-FM-1/2 枚举映射 + Decimal |
+| **合计** | **+37** | |
+
+### 仍未处理（留给后续）
+
+| ID | 严重度 | 说明 |
+|----|------|------|
+| HIGH-SW-1 | HIGH | tasks.claim TOCTOU 竞态，需改成 UPDATE-WHERE |
+| HIGH-SW-6 | HIGH | candlestick unbounded query |
+| HIGH-FM-3（真实 solver） | HIGH | fail-closed 门已加，但真正的 CKB batch-tx builder 仍缺 |
+| MED-* | MEDIUM | 详见 `DEEP_AUDIT_SWAP_FARM_RELAYER.md` 的 MED 清单 |
