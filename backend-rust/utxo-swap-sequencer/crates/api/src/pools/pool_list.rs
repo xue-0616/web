@@ -49,17 +49,39 @@ pub async fn handler(
         .all(ctx.db())
         .await?;
 
-    // Enrich with token info
-    let mut results = Vec::new();
+    // HIGH-SW-5: previously this loop ran two SELECTs per pool
+    // (one for token_x, one for token_y). At the max page_size
+    // of 100 that's up to 200 extra round-trips per request, an
+    // easy DoS vector — a single client could keep hundreds of
+    // DB connections busy by rapid-firing /pools?pageSize=100.
+    //
+    // Fix: collect every distinct asset type_hash referenced by the
+    // page, do ONE IN-query, and hand out shared references via a
+    // HashMap keyed on the type_hash bytes. With 100 pools we go
+    // from ~201 queries to 2.
+    let mut wanted_hashes: std::collections::HashSet<Vec<u8>> =
+        std::collections::HashSet::with_capacity(pools.len() * 2);
+    for pool in &pools {
+        wanted_hashes.insert(pool.asset_x_type_hash.clone());
+        wanted_hashes.insert(pool.asset_y_type_hash.clone());
+    }
+
+    let tokens_by_hash: std::collections::HashMap<Vec<u8>, tokens::Model> = if wanted_hashes.is_empty() {
+        std::collections::HashMap::new()
+    } else {
+        tokens::Entity::find()
+            .filter(tokens::Column::TypeHash.is_in(wanted_hashes.into_iter().collect::<Vec<_>>()))
+            .all(ctx.db())
+            .await?
+            .into_iter()
+            .map(|t| (t.type_hash.clone(), t))
+            .collect()
+    };
+
+    let mut results = Vec::with_capacity(pools.len());
     for pool in pools {
-        let token_x = tokens::Entity::find()
-            .filter(tokens::Column::TypeHash.eq(pool.asset_x_type_hash.clone()))
-            .one(ctx.db())
-            .await?;
-        let token_y = tokens::Entity::find()
-            .filter(tokens::Column::TypeHash.eq(pool.asset_y_type_hash.clone()))
-            .one(ctx.db())
-            .await?;
+        let token_x = tokens_by_hash.get(&pool.asset_x_type_hash).cloned();
+        let token_y = tokens_by_hash.get(&pool.asset_y_type_hash).cloned();
 
         results.push(PoolInfoResponse {
             id: pool.id,
