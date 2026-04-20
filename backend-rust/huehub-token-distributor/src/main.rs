@@ -121,6 +121,23 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    // Readiness: report ready iff the primary DB pool responds to a
+    // lightweight ping. Extend `from_pairs` with more deps (CKB RPC,
+    // Redis, ...) as they get added — a failing dep returns 503 so a
+    // k8s readiness probe pulls the pod from Service endpoints without
+    // killing it, letting the worker loop keep retrying.
+    let db_ready = db.clone();
+    let readiness = ReadinessCheck::new(move || {
+        let db = db_ready.clone();
+        async move {
+            let (ok, detail) = match db.ping().await {
+                Ok(()) => (true, None),
+                Err(e) => (false, Some(e.to_string())),
+            };
+            ReadinessReport::from_pairs(&[("db", ok, detail)])
+        }
+    });
+
     tracing::info!("Starting token-distributor on port {}", cfg.port);
     let port = cfg.port;
     actix_web::HttpServer::new(move || {
@@ -141,12 +158,18 @@ async fn main() -> anyhow::Result<()> {
             .wrap(cors)
             .wrap(security::RateLimiter::new(60, 60)) // 60 req/min per IP
             .wrap(security::ApiKeyAuth::new(distributor_api_key.clone()))
-            .route("/health", actix_web::web::get().to(|| async {
-                actix_web::HttpResponse::Ok().json(serde_json::json!({"status":"ok"}))
-            }))
-            .route("/status", actix_web::web::get().to(|| async {
-                actix_web::HttpResponse::Ok().json(serde_json::json!({"status":"ok"}))
-            }))
+            // Observability routes. ApiKeyAuth's skip-list in
+            // security.rs lets these through without X-API-Key so
+            // scrapers / probes don't need a shared secret.
+            .app_data(actix_web::web::Data::new(prom_handle.clone()))
+            .app_data(actix_web::web::Data::new(readiness.clone()))
+            .route("/healthz", actix_web::web::get().to(health::healthz))
+            .route("/readyz", actix_web::web::get().to(health::readyz))
+            .route("/metrics", actix_web::web::get().to(obs_metrics::metrics_endpoint))
+            // Legacy names kept for rollout overlap — remove after
+            // every caller has migrated to /healthz.
+            .route("/health", actix_web::web::get().to(health::healthz))
+            .route("/status", actix_web::web::get().to(health::healthz))
     })
     .bind(("0.0.0.0", port))?
     .run()

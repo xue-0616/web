@@ -80,6 +80,13 @@ async fn consume_once(ctx: &RelayerContext) -> anyhow::Result<()> {
         .await
         .unwrap_or(0);
 
+    // Expose the backlog as a gauge so Grafana can chart growth
+    // and Prometheus alert rules can fire when len > threshold
+    // for > N minutes. This fires on EVERY tick (not just when
+    // len > 0), so "consumer is alive and sees 0" is also
+    // observable.
+    metrics::gauge!("relayer_stream_backlog").set(len as f64);
+
     if len > 0 {
         if consumer_is_enabled() {
             anyhow::bail!(

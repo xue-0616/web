@@ -4362,6 +4362,7 @@ dependencies = [
  "entity",
  "hex",
  "intent-solver",
+ "metrics",
  "redis",
  "reqwest",
  "sea-orm",

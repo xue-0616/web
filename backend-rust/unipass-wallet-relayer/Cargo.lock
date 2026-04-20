@@ -3684,6 +3684,7 @@ dependencies = [
  "deadpool-redis",
  "ethers",
  "hex",
+ "metrics",
  "redis",
  "sea-orm",
  "serde",

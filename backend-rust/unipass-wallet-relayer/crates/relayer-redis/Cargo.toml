@@ -14,5 +14,6 @@ sea-orm.workspace = true
 ethers.workspace = true
 async-trait.workspace = true
 hex.workspace = true
+metrics.workspace = true
 api = { path = "../api" }
 daos-relayer = { path = "../daos-relayer" }

@@ -326,23 +326,50 @@ pub async fn process_entries<B: TxBroadcaster>(
 ) -> Vec<EntryAction> {
     let mut actions = Vec::with_capacity(entries.len());
     for entry in entries {
+        // `relayer_entry_result_total{result=...}` — four labels
+        // matching the four EntryAction variants. Graph this as
+        // a rate() to see throughput per outcome; alert on a
+        // sustained non-zero `retain_transient` (RPC health
+        // issue) or any `ack_poisoned` (malformed producer).
         let action = match broadcaster.broadcast(&entry).await {
-            Ok(tx_hash) => EntryAction::Ack {
-                stream_id: entry.stream_id,
-                reason: AckReason::Success(tx_hash),
-            },
-            Err(BroadcastError::InvalidInput(msg)) => EntryAction::Ack {
-                stream_id: entry.stream_id,
-                reason: AckReason::Poisoned(msg),
-            },
-            Err(BroadcastError::Transient(msg)) => EntryAction::Retain {
-                stream_id: entry.stream_id,
-                reason: RetainReason::Transient(msg),
-            },
-            Err(BroadcastError::NotImplemented(why)) => EntryAction::Retain {
-                stream_id: entry.stream_id,
-                reason: RetainReason::NotImplemented(why),
-            },
+            Ok(tx_hash) => {
+                metrics::counter!("relayer_entry_result_total", "result" => "ack_success")
+                    .increment(1);
+                EntryAction::Ack {
+                    stream_id: entry.stream_id,
+                    reason: AckReason::Success(tx_hash),
+                }
+            }
+            Err(BroadcastError::InvalidInput(msg)) => {
+                metrics::counter!("relayer_entry_result_total", "result" => "ack_poisoned")
+                    .increment(1);
+                EntryAction::Ack {
+                    stream_id: entry.stream_id,
+                    reason: AckReason::Poisoned(msg),
+                }
+            }
+            Err(BroadcastError::Transient(msg)) => {
+                metrics::counter!(
+                    "relayer_entry_result_total",
+                    "result" => "retain_transient"
+                )
+                .increment(1);
+                EntryAction::Retain {
+                    stream_id: entry.stream_id,
+                    reason: RetainReason::Transient(msg),
+                }
+            }
+            Err(BroadcastError::NotImplemented(why)) => {
+                metrics::counter!(
+                    "relayer_entry_result_total",
+                    "result" => "retain_notimpl"
+                )
+                .increment(1);
+                EntryAction::Retain {
+                    stream_id: entry.stream_id,
+                    reason: RetainReason::NotImplemented(why),
+                }
+            }
         };
         actions.push(action);
     }

@@ -104,6 +104,10 @@ pub async fn process_farm_intents_with_builder<B: BatchTxBuilder>(
     //    tick will re-query.
     let affected = intent_state_machine::claim(db, &chosen_ids).await?;
     if affected == 0 {
+        // All selected rows got stolen by another replica.
+        // Count this separately from a healthy "nothing to do"
+        // so an alert can fire if the race is chronic.
+        metrics::counter!("farm_batch_claim_lost_total").increment(1);
         return Ok(());
     }
     tracing::info!(
@@ -112,6 +116,7 @@ pub async fn process_farm_intents_with_builder<B: BatchTxBuilder>(
         affected,
         chosen_ids.len()
     );
+    metrics::counter!("farm_batch_claimed_intents_total").increment(affected);
 
     // 4. Placeholder cell-data inputs. The real implementation
     //    will fetch `pool_cell_data` via CKB RPC (get_live_cell
@@ -122,12 +127,24 @@ pub async fn process_farm_intents_with_builder<B: BatchTxBuilder>(
     let pool_cell_data: Vec<u8> = Vec::new();
     let intent_cells: Vec<Vec<u8>> = vec![Vec::new(); affected as usize];
 
-    // 5. Build + terminal transition.
+    // 5. Build + terminal transition. One metric label per branch
+    //    so Grafana can split the per-farm throughput by outcome:
+    //    completed / failed / released_notimpl / released_transient.
+    //    Build latency is a histogram on the happy path only,
+    //    because failures are dominated by RPC / timeout times that
+    //    don't represent real work done.
+    let build_started = std::time::Instant::now();
     match builder.build(&pool_cell_data, &intent_cells).await {
         Ok(tx_hash) => {
+            let elapsed = build_started.elapsed().as_secs_f64();
+            metrics::histogram!("farm_batch_build_duration_seconds").record(elapsed);
+            metrics::counter!("farm_batch_result_total", "result" => "completed")
+                .increment(1);
             intent_state_machine::mark_completed(db, &chosen_ids, tx_hash).await?;
         }
         Err(BuildError::NotImplemented(why)) => {
+            metrics::counter!("farm_batch_result_total", "result" => "released_notimpl")
+                .increment(1);
             tracing::warn!(
                 "farm {}: builder returned NotImplemented ({}); releasing claim",
                 hex::encode(farm_type_hash),
@@ -136,6 +153,8 @@ pub async fn process_farm_intents_with_builder<B: BatchTxBuilder>(
             intent_state_machine::release(db, &chosen_ids).await?;
         }
         Err(BuildError::Transient(msg)) => {
+            metrics::counter!("farm_batch_result_total", "result" => "released_transient")
+                .increment(1);
             tracing::warn!(
                 "farm {}: transient build failure: {}; releasing claim",
                 hex::encode(farm_type_hash),
@@ -144,6 +163,8 @@ pub async fn process_farm_intents_with_builder<B: BatchTxBuilder>(
             intent_state_machine::release(db, &chosen_ids).await?;
         }
         Err(BuildError::InvalidInput(msg)) => {
+            metrics::counter!("farm_batch_result_total", "result" => "failed")
+                .increment(1);
             tracing::error!(
                 "farm {}: invalid builder input: {}; marking batch failed",
                 hex::encode(farm_type_hash),
