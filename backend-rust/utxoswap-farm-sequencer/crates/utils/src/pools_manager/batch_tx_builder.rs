@@ -65,7 +65,7 @@ pub struct IntentCandidate {
 ///
 /// Results are returned in FIFO order: ascending `created_at_secs`,
 /// breaking ties by ascending `id`. This matches the SQL query in
-/// `handler::process_farm_intents` that runs upstream, so the
+/// `handler::process_farm_intents_with_builder` that runs upstream, so the
 /// batch we build here is the same one the DB-layer claim would
 /// target.
 ///

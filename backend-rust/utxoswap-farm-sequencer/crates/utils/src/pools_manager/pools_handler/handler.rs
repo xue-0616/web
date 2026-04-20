@@ -5,38 +5,6 @@ use crate::pools_manager::batch_tx_builder::{
 };
 use crate::pools_manager::intent_state_machine;
 
-/// Legacy entry-point kept for existing callers (`manager::start`
-/// et al.) while the batch builder is stubbed. No state
-/// transitions happen here — when the pools-manager loop runs
-/// with `FARM_PROCESSING_ENABLED=true`, this prints how many
-/// intents are pending per pool and returns. The real work lives
-/// in `process_farm_intents_with_builder` below, and will replace
-/// this function once the CKB builder is plumbed in.
-pub async fn process_farm_intents(
-    db: &sea_orm::DatabaseConnection,
-    farm_type_hash: &[u8],
-) -> Result<()> {
-    use entity_crate::farm_intents;
-    use sea_orm::*;
-    let pending = farm_intents::Entity::find()
-        .filter(farm_intents::Column::FarmTypeHash.eq(farm_type_hash.to_vec()))
-        .filter(farm_intents::Column::Status.eq(farm_intents::FarmIntentStatus::Pending))
-        .order_by_asc(farm_intents::Column::CreatedAt)
-        .limit(50)
-        .all(db)
-        .await?;
-
-    if pending.is_empty() {
-        return Ok(());
-    }
-    tracing::info!(
-        "Processing {} farm intents for {}",
-        pending.len(),
-        hex::encode(farm_type_hash)
-    );
-    Ok(())
-}
-
 /// Full HIGH-FM-3 processing loop: query pending → select batch
 /// → atomic claim → call builder → transition to terminal state.
 ///

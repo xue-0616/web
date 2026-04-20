@@ -1,12 +1,9 @@
-use api_common::context::AppContext;
-
-/// Main processing loop: scan active farm pools, process intents
-pub async fn run(ctx: AppContext) {
-    let mut interval = tokio::time::interval(std::time::Duration::from_secs(3));
-    loop {
-        interval.tick().await;
-        if let Err(e) = super::super::manager::process_all_farms(&ctx).await {
-            tracing::error!("Farm pools handler error: {}", e);
-        }
-    }
-}
+//! Legacy orphan module.
+//!
+//! Both `process_farm_batch` and `run` used to live here as
+//! never-called stubs.  The active processing loop is
+//! `pools_manager::manager::start` → `process_all_farms` →
+//! `handler::process_farm_intents_with_builder`.  This file is
+//! kept as a module declaration so future per-pool-runner
+//! concerns (per-pool concurrency caps, per-pool feature
+//! flags, etc.) have a natural home.
