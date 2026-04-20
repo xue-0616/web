@@ -119,6 +119,25 @@ done
 Redis and returns the per-dependency report. A `503` with a JSON
 body like `{"redis":"down"}` tells you exactly which dep is sad.
 
+### Guardrail smoke (rounds 5–6 fail-closed contract)
+
+Once the stack is healthy, run:
+
+```bash
+bash scripts/guardrail-smoke.sh                 # default ports
+SKIP_SWAP=1 bash scripts/guardrail-smoke.sh     # if swap-seq not up
+```
+
+The script probes each fail-closed endpoint and asserts the expected
+HTTP code from §4a / §4b (501 for stubs, 503 for disabled gates, 401
+for auth-guarded routes called without credentials). It exits 0 on
+pass and non-zero on any real regression — stub endpoints silently
+returning 200, or 500s where the contract says 503, will fail here.
+
+Swap-sequencer is not yet part of `docker-compose.integration.yml`,
+so by default those assertions skip (reported as `SKIP`, not `FAIL`).
+Bring up swap-seq separately and set `SWAP_PORT=…` to include them.
+
 Prometheus scrape (should dump actix-web HTTP metrics):
 
 ```bash
