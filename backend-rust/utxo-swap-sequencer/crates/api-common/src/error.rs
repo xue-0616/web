@@ -32,6 +32,13 @@ pub enum ApiError {
     /// stops the `tracing::error!` spam every Internal triggers.
     #[error("Not implemented: {0}")]
     NotImplemented(String),
+    /// MED-SW-2: 503 Service Unavailable for endpoints that depend
+    /// on a deployment / runtime configuration that isn't present
+    /// yet. Distinct from NotImplemented (code missing) and
+    /// Internal (code broke) — this one says "code is fine, ops
+    /// still has work to do". Clients can retry.
+    #[error("Service unavailable: {0}")]
+    ServiceUnavailable(String),
 }
 
 #[derive(Serialize)]
@@ -84,6 +91,17 @@ impl ResponseError for ApiError {
                 // early integration, not an alert-worthy event.
                 tracing::info!("Not implemented endpoint hit: {}", msg);
                 (actix_web::http::StatusCode::NOT_IMPLEMENTED, msg.clone())
+            }
+            ApiError::ServiceUnavailable(msg) => {
+                // Warn-level: operator action required, but not
+                // code-broken. A 503 typically means a config env
+                // var is missing; loud enough to notice, quiet
+                // enough not to page.
+                tracing::warn!("Service unavailable: {}", msg);
+                (
+                    actix_web::http::StatusCode::SERVICE_UNAVAILABLE,
+                    msg.clone(),
+                )
             }
         };
 

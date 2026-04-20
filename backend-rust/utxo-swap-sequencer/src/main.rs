@@ -48,6 +48,17 @@ async fn main() -> anyhow::Result<()> {
             sequencer_utxo_global_api_key: config.sequencer_utxo_global_api_key.clone(),
             slack_webhook: config.slack_webhook.clone(),
             github_token: config.github_token.clone(),
+            // MED-SW-2
+            sequencer_lock_code_hash: config.sequencer_lock_code_hash.clone(),
+            sequencer_lock_hash_type: config.sequencer_lock_hash_type,
+            sequencer_lock_args: config.sequencer_lock_args.clone(),
+            pool_type_code_hash: config.pool_type_code_hash.clone(),
+            configs_cell_type_hash: config.configs_cell_type_hash.clone(),
+            deployment_cell_type_hash: config.deployment_cell_type_hash.clone(),
+            swap_fee_bps: config.swap_fee_bps,
+            min_liquidity: config.min_liquidity.clone(),
+            max_intents_per_batch: config.max_intents_per_batch,
+            batch_interval_ms: config.batch_interval_ms,
         },
     };
 

@@ -19,6 +19,17 @@ pub mod config_ref {
         pub sequencer_utxo_global_api_key: String,
         pub slack_webhook: String,
         pub github_token: String,
+        // MED-SW-2: deployment surface exposed via /configurations
+        pub sequencer_lock_code_hash: String,
+        pub sequencer_lock_hash_type: u8,
+        pub sequencer_lock_args: String,
+        pub pool_type_code_hash: String,
+        pub configs_cell_type_hash: String,
+        pub deployment_cell_type_hash: String,
+        pub swap_fee_bps: u16,
+        pub min_liquidity: String,
+        pub max_intents_per_batch: u32,
+        pub batch_interval_ms: u32,
     }
 }
 

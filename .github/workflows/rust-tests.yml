@@ -147,6 +147,18 @@ jobs:
         # Runs without external services (all tests use in-memory
         # fakes); no Redis / RPC sidecar needed in CI.
         run: cargo test -p relayer --lib
+      - name: test relayer MED round (RL-2 / RL-3 / RL-4)
+        # 10 new tests across three service-plane leaf crates:
+        #   - tokens-manager (3) — MED-RL-2: CoinGecko response
+        #     actually populates self.prices; id lookup is
+        #     case-insensitive; new() starts empty.
+        #   - relayer-redis (3) — MED-RL-3: `RELAYER_CONSUMER_ENABLED`
+        #     env gate; falsy/garbage/default all keep the
+        #     consumer in fail-loud stub mode.
+        #   - configs (4) — MED-RL-4: Apollo override allow-list;
+        #     reserved secret fields refuse override;
+        #     case-insensitive; garbage port value rejected.
+        run: cargo test -p tokens-manager -p relayer-redis -p configs --lib
 
   utxo-swap-sequencer-molecule:
     # Gates the CRIT-SW-1 / CRIT-SW-2 regression tests added in the
@@ -194,6 +206,11 @@ jobs:
         # defaults — serial via explicit Mutex, so `--test-threads=1`
         # is not required.
         run: cargo test -p utils --lib tokens_manager::price_oracle::med_sw_5_tests
+      - name: test /configurations deployment surface (MED-SW-2)
+        # 4 tests for the config-completeness gate that now backs
+        # the public /api/v1/configurations endpoint. No env/DB
+        # required — handler is exercised via a pure helper.
+        run: cargo test -p api --lib configurations::tests
 
   utxoswap-farm-sequencer-purefuncs:
     # Gates the two pure-function test suites added in the BUG-P1
@@ -221,6 +238,10 @@ jobs:
           workspaces: backend-rust/utxoswap-farm-sequencer
       - name: test parser (crates/types)
         run: cargo test -p types parser::tests
+      - name: test checker clock-skew tolerance (MED-FM-2)
+        # 7 regression tests for the pool_end_time tolerance gate
+        # added to check_farm_intent. Pure-function, no deps.
+        run: cargo test -p types checker::tests
       - name: test security module (bin)
         run: cargo test --bin utxoswap-farm-sequencer security::tests
       - name: test intent submission (HIGH-FM-1 / HIGH-FM-2 / HIGH-FM-3)
