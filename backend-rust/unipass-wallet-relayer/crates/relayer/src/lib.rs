@@ -1,4 +1,5 @@
 pub mod api;
+pub mod replay;
 
 use actix_web::web;
 

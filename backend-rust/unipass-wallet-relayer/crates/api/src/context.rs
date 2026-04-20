@@ -15,4 +15,9 @@ impl RelayerContext {
     pub async fn redis_conn(&self) -> anyhow::Result<deadpool_redis::Connection> {
         Ok(self.redis.get().await?)
     }
+    /// Expose the raw pool for components (like the replay cache) that
+    /// manage their own connection acquisition semantics.
+    pub fn redis_pool(&self) -> deadpool_redis::Pool {
+        self.redis.clone()
+    }
 }

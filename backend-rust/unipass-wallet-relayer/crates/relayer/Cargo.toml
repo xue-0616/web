@@ -12,8 +12,18 @@ anyhow.workspace = true
 ethers.workspace = true
 hex.workspace = true
 chrono.workspace = true
+thiserror.workspace = true
+async-trait = "0.1"
+deadpool-redis.workspace = true
+tokio = { workspace = true, features = ["sync"] }
 api = { path = "../api" }
 daos-relayer = { path = "../daos-relayer" }
 execute-validator = { path = "../execute-validator" }
 contracts-abi = { path = "../contracts-abi" }
 configs = { path = "../configs" }
+
+[features]
+# Enables `InMemoryReplayCache` for downstream integration tests that
+# cannot spin up Redis. Unit tests inside this crate already get it
+# for free via `#[cfg(test)]`.
+test-support = []

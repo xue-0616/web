@@ -113,3 +113,97 @@ fn parse_inner_transactions(data: &[u8]) -> Result<Vec<InnerTransaction>> {
 
     Ok(txs)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ethers::abi::{encode, Token};
+
+    /// Build a well-formed execute calldata with `n` identical inner txs.
+    /// The inner tx has: delegate_call=false, revert_on_error=true,
+    /// gas_limit=100_000, target=0x00…01, value=0, data=empty.
+    fn mk_calldata(n: usize, nonce: u64) -> Vec<u8> {
+        let mut inner = Vec::new();
+        for _ in 0..n {
+            inner.push(0u8);
+            inner.push(1u8);
+            let mut gas = [0u8; 32];
+            U256::from(100_000u64).to_big_endian(&mut gas);
+            inner.extend_from_slice(&gas);
+            let mut target = [0u8; 20];
+            target[19] = 1;
+            inner.extend_from_slice(&target);
+            inner.extend_from_slice(&[0u8; 32]); // value
+            inner.extend_from_slice(&[0u8; 32]); // data_len = 0
+        }
+        let encoded = encode(&[
+            Token::Bytes(inner),
+            Token::Uint(U256::from(nonce)),
+            Token::Bytes(vec![0xaa; 65]),
+        ]);
+        let mut out = vec![0x1f, 0x6a, 0x1e, 0xb9];
+        out.extend_from_slice(&encoded);
+        out
+    }
+
+    #[test]
+    fn parses_one_inner() {
+        let cd = mk_calldata(1, 5);
+        let p = parse_execute_calldata(&cd).expect("parse");
+        assert_eq!(p.nonce, U256::from(5));
+        assert_eq!(p.inner_txs.len(), 1);
+        assert!(!p.inner_txs[0].delegate_call);
+        assert!(p.inner_txs[0].revert_on_error);
+        assert_eq!(p.inner_txs[0].gas_limit, U256::from(100_000u64));
+    }
+
+    #[test]
+    fn parses_many_inner() {
+        let cd = mk_calldata(5, 99);
+        let p = parse_execute_calldata(&cd).unwrap();
+        assert_eq!(p.inner_txs.len(), 5);
+        assert_eq!(p.nonce, U256::from(99));
+    }
+
+    #[test]
+    fn rejects_too_short() {
+        let err = parse_execute_calldata(&[0x1f, 0x6a]).unwrap_err();
+        assert!(err.to_string().contains("too short"));
+    }
+
+    #[test]
+    fn rejects_bad_selector() {
+        let mut cd = mk_calldata(1, 1);
+        cd[0] = 0xde;
+        cd[1] = 0xad;
+        let err = parse_execute_calldata(&cd).unwrap_err();
+        assert!(err.to_string().contains("unknown selector"));
+    }
+
+    /// A malicious `data_len` larger than u64 (bits > 64) must be
+    /// rejected cleanly instead of panicking via `U256::as_usize`.
+    #[test]
+    fn rejects_overflow_data_len() {
+        use ethers::abi::{encode, Token};
+        let mut inner = Vec::new();
+        inner.push(0u8);
+        inner.push(1u8);
+        let mut gas = [0u8; 32];
+        U256::from(100_000u64).to_big_endian(&mut gas);
+        inner.extend_from_slice(&gas);
+        inner.extend_from_slice(&[0u8; 20]); // target
+        inner.extend_from_slice(&[0u8; 32]); // value
+        // data_len with top bits set → >64-bit → should be rejected.
+        inner.extend_from_slice(&[0xff; 32]);
+        let encoded = encode(&[
+            Token::Bytes(inner),
+            Token::Uint(U256::from(1u64)),
+            Token::Bytes(vec![]),
+        ]);
+        let mut cd = vec![0x1f, 0x6a, 0x1e, 0xb9];
+        cd.extend_from_slice(&encoded);
+
+        let err = parse_execute_calldata(&cd).unwrap_err();
+        assert!(err.to_string().contains("overflow"));
+    }
+}

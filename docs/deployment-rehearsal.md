@@ -189,11 +189,18 @@ rm -rf ./data/mysql ./data/redis
 Even after rehearsal passes you still need to resolve, in descending
 severity:
 
-1. **BUG-P2-C2** — `unipass-wallet-relayer` currently accepts any
-   calldata from any client. It MUST verify the user's EIP-712 or
-   SmartAccount signature before broadcasting. Do not run against
-   real user funds until this lands. Tracked in
-   `DEEP_AUDIT_SWAP_FARM_RELAYER.md`.
+1. ~~**BUG-P2-C2** — `unipass-wallet-relayer` currently accepts any
+   calldata from any client.~~ **FIXED** in commit introducing
+   `crates/relayer/src/replay.rs` +
+   `crates/execute-validator/src/validator.rs`. The
+   `POST /api/v1/transactions` handler now runs a 4-stage pipeline:
+   parse → structural validate (reject delegate_call, cap inner-tx
+   count at 32) → Redis replay-claim `(chainId, wallet, nonce)` →
+   on-chain `eth_call` of the execute calldata so the wallet
+   contract's own `_validateSignature` is the ground truth. Handler
+   is covered by 6 unit tests against a mocked simulator (happy
+   path, replay, revert, bad selector, empty, delegate_call reject).
+   Validator + parser have 14 more unit tests. 25 tests total.
 2. **BUG-P1-H2** — `utxoswap-farm-sequencer` `create_pool` endpoint is
    still a stub that returns `{"status":"pending"}` without doing
    anything. Same source doc.
