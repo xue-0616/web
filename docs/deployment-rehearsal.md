@@ -281,15 +281,28 @@ functional work, not security work:
 
 ### Functional gaps that still need implementation sessions
 
-- **CKB batch-tx builder** (`utxoswap-farm-sequencer/crates/utils/
-  src/pools_manager/manager.rs`) — currently returns early under
-  `FARM_PROCESSING_ENABLED=false`. Needs: UTXO collection, cell
-  assembly for the farm script, signing, and broadcast. Multi-
-  session work.
-- **Relayer signing pipeline** (`unipass-wallet-relayer/crates/
-  relayer-redis`) — `consume_once` observes `XLEN` but does not
-  yet `XREADGROUP` → sign → `eth_sendRawTransaction` → `XACK`.
-  Gated by `RELAYER_CONSUMER_ENABLED=false`.
+**Each has a scaffold already landed on `origin/main` — the trait,
+error taxonomy, pure selector/parser, atomic state machine, and
+handler wiring are done. See `docs/scaffold-design.md` for the
+one-page "what you still need to write" guide.** The bullets below
+point at the chain-specific piece the scaffold doesn't own.
+
+- **CKB batch-tx builder** — `impl BatchTxBuilder` for the
+  `utxoswap-farm-sequencer` service. Scaffold seam is
+  `crates/utils/src/pools_manager/batch_tx_builder.rs`; wiring is
+  `process_farm_intents_with_builder` in `pools_handler/handler.rs`.
+  Needs: molecule deserialization of the pool cell, tx assembly,
+  CKB signing + broadcast. Gated by `FARM_PROCESSING_ENABLED=false`
+  until you plug in a real builder; `NoopBatchTxBuilder` makes the
+  scaffold inert for testing.
+- **Relayer signing pipeline** — `impl TxBroadcaster` for the
+  `unipass-wallet-relayer` service, plus two wiring PRs:
+  (a) XADD push from `POST /transactions/relay`, and (b) rewrite
+  `consume_once` to call `process_entries` and honour the returned
+  `Vec<EntryAction>`. Scaffold seam is
+  `crates/relayer-redis/src/broadcaster.rs`. Gated by
+  `RELAYER_CONSUMER_ENABLED=false`; `NoopTxBroadcaster` keeps the
+  scaffold inert.
 - **Integration tests with live sidecars** (MySQL, Redis, CKB) —
   the per-PR gate today is unit-only; a scheduled integration job
   that stands up the compose file and exercises the happy paths
