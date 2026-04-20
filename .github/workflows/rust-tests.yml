@@ -137,13 +137,20 @@ jobs:
         # Regression for the fix that replaced the tautological
         # ecrecover check with real structural validation.
         run: cargo test -p execute-validator --lib
-      - name: test relayer lib (BUG-P2-C2 pipeline + RPC client)
-        # 16 tests total:
+      - name: test relayer lib (BUG-P2-C2 pipeline + RPC client + nonce manager)
+        # 25 tests total:
         #   - api::transactions (6) — handler-level, mocked simulator
         #     covering happy path, replay, simulator revert, bad
         #     selector, empty calldata, delegate_call early-reject
         #   - replay (5) — Redis-backed nonce cache semantics
         #   - api::rpc_client (5) — HIGH-RL-1 chain-id -> URL mapping
+        #   - nonce (9) — MED-RL-3 EOA nonce manager.  The most
+        #     load-bearing test is `concurrent_callers_get_unique_
+        #     nonces`, which spawns 100 tasks racing on the same
+        #     (chain_id, addr) key; they must produce 100 distinct
+        #     values.  A regression (e.g. splitting the get+insert
+        #     critical section) would silently emit colliding
+        #     nonces and jam the mempool.
         # Runs without external services (all tests use in-memory
         # fakes); no Redis / RPC sidecar needed in CI.
         run: cargo test -p relayer --lib
