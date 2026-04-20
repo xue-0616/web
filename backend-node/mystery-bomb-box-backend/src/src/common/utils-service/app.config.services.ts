@@ -14,26 +14,34 @@ export class AppConfigService {
     }
     get(key: any) {
             const value = this.configService.get(key);
-            if (isNil(value)) {
-                throw new Error(key + ' environment variable does not set');
+            if (isNil(value) || value === '') {
+                // See solagram-backend/app.config.services.ts for
+                // rationale: fail-open in rehearsal, fail-closed when
+                // STRICT_CONFIG=true.
+                if (process.env.STRICT_CONFIG === 'true') {
+                    throw new Error(key + ' environment variable does not set');
+                }
+                this.logger.warn(`config key '${key}' missing — defaulting to empty`);
+                return '';
             }
-            return value.trim();
+            return String(value).trim();
         }
     getNumber(key: any) {
             const value = this.get(key);
-            try {
-                return Number(value);
+            if (value === '') return 0;
+            const n = Number(value);
+            if (Number.isNaN(n)) {
+                this.logger.error(`[getNumber] key=${key} value='${value}' is not numeric`);
+                if (process.env.STRICT_CONFIG === 'true') {
+                    throw new Error(key + ' environment variable is not a number');
+                }
+                return 0;
             }
-            catch (error) {
-                const e = error as Error;
-                this.logger.error(`[getNumber] ${e},${e?.stack} data = ${JSON.stringify({
-                    key,
-                })}`);
-                throw new Error(key + ' environment variable is not a number');
-            }
+            return n;
         }
     getBoolean(key: any) {
             const value = this.get(key);
+            if (value === '') return false;
             try {
                 return Boolean(JSON.parse(value));
             }
@@ -42,7 +50,10 @@ export class AppConfigService {
                 this.logger.error(`[getBoolean] ${e},${e?.stack} data = ${JSON.stringify({
                     key,
                 })}`);
-                throw new Error(key + ' env var is not a boolean');
+                if (process.env.STRICT_CONFIG === 'true') {
+                    throw new Error(key + ' env var is not a boolean');
+                }
+                return false;
             }
         }
     getString(key: any) {

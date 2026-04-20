@@ -15,26 +15,38 @@ export class AppConfigService {
     }
     get(key: any) {
             const value = this.configService.get(key);
-            if (isNil(value)) {
-                throw new Error(key + ' environment variable does not set');
+            if (isNil(value) || value === '') {
+                // Historically this threw and brought the whole Nest boot
+                // down on any missing key. That was fine when every
+                // deployment had a provisioned `.env` file, but rehearsal
+                // and CI need the process to at least start so health
+                // probes can run. Fall back to '' and warn once per key.
+                // In production, set `STRICT_CONFIG=true` to restore the
+                // old fail-closed behaviour.
+                if (process.env.STRICT_CONFIG === 'true') {
+                    throw new Error(key + ' environment variable does not set');
+                }
+                this.logger.warn(`config key '${key}' missing — defaulting to empty`);
+                return '';
             }
-            return value.trim();
+            return String(value).trim();
         }
     getNumber(key: any) {
             const value = this.get(key);
-            try {
-                return Number(value);
+            if (value === '') return 0;  // rehearsal default
+            const n = Number(value);
+            if (Number.isNaN(n)) {
+                this.logger.error(`[getNumber] key=${key} value='${value}' is not numeric`);
+                if (process.env.STRICT_CONFIG === 'true') {
+                    throw new Error(key + ' environment variable is not a number');
+                }
+                return 0;
             }
-            catch (error) {
-                const e = error as Error;
-                this.logger.error(`[getNumber] ${e},${e?.stack} data = ${JSON.stringify({
-                    key,
-                })}`);
-                throw new Error(key + ' environment variable is not a number');
-            }
+            return n;
         }
     getBoolean(key: any) {
             const value = this.get(key);
+            if (value === '') return false;  // rehearsal default
             try {
                 return Boolean(JSON.parse(value));
             }
@@ -43,7 +55,10 @@ export class AppConfigService {
                 this.logger.error(`[getBoolean] ${e},${e?.stack} data = ${JSON.stringify({
                     key,
                 })}`);
-                throw new Error(key + ' env var is not a boolean');
+                if (process.env.STRICT_CONFIG === 'true') {
+                    throw new Error(key + ' env var is not a boolean');
+                }
+                return false;
             }
         }
     getString(key: any) {

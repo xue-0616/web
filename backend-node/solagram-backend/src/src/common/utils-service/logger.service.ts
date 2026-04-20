@@ -1,6 +1,10 @@
 import { Injectable, Scope } from '@nestjs/common';
 import { Logger, createLogger, format, transports } from 'winston';
-import DailyRotateFile from 'winston-daily-rotate-file';
+// Use namespace import — `winston-daily-rotate-file` ships a CJS
+// module.exports = DailyRotateFile (no .default), so the decompiled
+// `import X from '...'` produced `require('...').default` which is
+// undefined at runtime. Namespace import bypasses the interop layer.
+import * as DailyRotateFile from 'winston-daily-rotate-file';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class AppLoggerService {

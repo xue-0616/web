@@ -1,6 +1,8 @@
 import { Injectable, Scope } from '@nestjs/common';
 import { Logger, createLogger, format, transports } from 'winston';
-import DailyRotateFile from 'winston-daily-rotate-file';
+// See solagram logger.service.ts: namespace import avoids the
+// broken `.default` interop the decompiler produced.
+import * as DailyRotateFile from 'winston-daily-rotate-file';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class AppLoggerService {

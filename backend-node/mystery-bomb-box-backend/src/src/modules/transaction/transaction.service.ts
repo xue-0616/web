@@ -28,7 +28,25 @@ export class TransactionService implements OnModuleInit, OnModuleDestroy {
         this.mutex = new Mutex();
         this.solanaClient = new Connection(appConfig.solanaRpcUrl);
         this.logger.setContext(TransactionService.name);
-        this.submitter = Keypair.fromSecretKey(Buffer.from(this.appConfig.submitterSecretKey, 'base64'));
+        // Rehearsal guard: without a valid base64-encoded 64-byte key
+        // Keypair.fromSecretKey throws and the whole Nest boot dies.
+        // When the key is missing, leave `submitter` null; any code
+        // path that tries to sign will null-deref with a clear error,
+        // while the rest of the service (reads, health probes) works.
+        const rawKey = this.appConfig.submitterSecretKey;
+        if (rawKey) {
+            try {
+                this.submitter = Keypair.fromSecretKey(Buffer.from(rawKey, 'base64'));
+            }
+            catch (e) {
+                this.logger.warn(`[constructor] submitterSecretKey invalid (${(e as Error).message}) — signing disabled`);
+                this.submitter = null;
+            }
+        }
+        else {
+            this.logger.warn('[constructor] submitterSecretKey missing — signing disabled');
+            this.submitter = null;
+        }
     }
     transactions: TransactionEntity[];
     latestSuccessSignature: string | null;

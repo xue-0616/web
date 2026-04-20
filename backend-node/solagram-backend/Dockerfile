@@ -15,6 +15,11 @@ RUN if [ -f package-lock.json ]; then npm ci --ignore-scripts --legacy-peer-deps
     else npm install --ignore-scripts --legacy-peer-deps; fi
 
 COPY . .
+# Wipe any stale pre-compiled dist/ so tsc recompiles from the current
+# sources (the decompiled repo nests source under src/src/, which
+# produces dist/src/src/ — don't let leftover dist/src/ from earlier
+# builds shadow it).
+RUN rm -rf dist
 RUN npm run build
 
 # ---- runtime ----
@@ -41,4 +46,4 @@ EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD curl -sf "http://127.0.0.1:${PORT}/health" || exit 1
 
-CMD ["node", "dist/src/main.js"]
+CMD ["node", "dist/src/src/main.js"]

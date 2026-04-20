@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { AppLoggerService } from '../../common/utils-service/logger.service';
 import { AppConfigService } from '../../common/utils-service/app.config.services';
-import TelegramBot from 'node-telegram-bot-api';
+import TelegramBot = require('node-telegram-bot-api');
 import { ParseBlinkService } from '../blink/parse.blink.service';
 import Redis from 'ioredis';
 import { BlinkShortCodeDBService } from '../blink/blink-short-code-db.service';

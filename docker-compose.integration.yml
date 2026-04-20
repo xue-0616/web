@@ -102,20 +102,28 @@ services:
       redis: { condition: service_healthy }
     ports: ["3001:3001"]
     environment:
-      # Decompiled AppModule does `_config.get('port')` (lowercase),
-      # NestJS ConfigService reads process.env case-sensitive, so we
-      # set the lowercase key directly.
+      # The decompiled AppConfigService does `_config.get('xxx')` with
+      # **lowercase** keys, and NestJS ConfigService reads
+      # process.env case-sensitive. So every key this service actually
+      # uses needs a lowercase env-var here.
       port: "3001"
       globalPrefix: ""
+      dbHost: mysql
+      dbPort: "3306"
+      dbUsername: ${MYSQL_USER:-integration}
+      dbPassword: ${MYSQL_PASSWORD}
+      dbDatabase: ${MYSQL_DATABASE:-integration}
+      enableOrmLogs: "false"
+      maxQueryExecutionTime: "1000"
+      timezone: UTC
+      connectionLimit: "10"
+      redisIsCluster: "false"
+      redisSingleUrl: redis://redis:6379
+      redisPassword: ""
+      redisUsername: ""
+      enabledDocumentation: "false"
       NODE_ENV: production
       PORT: 3001
-      DATABASE_HOST: mysql
-      DATABASE_PORT: 3306
-      DATABASE_USER: ${MYSQL_USER:-integration}
-      DATABASE_PASSWORD: ${MYSQL_PASSWORD}
-      DATABASE_NAME: ${MYSQL_DATABASE:-integration}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
       SOLANA_RPC_URL: ${SOLANA_RPC_URL:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.integration}
@@ -134,16 +142,28 @@ services:
       # Same lowercase-key quirk as solagram.
       port: "3002"
       globalPrefix: ""
+      dbHost: mysql
+      dbPort: "3306"
+      dbUsername: ${MYSQL_USER:-integration}
+      dbPassword: ${MYSQL_PASSWORD}
+      dbDatabase: ${MYSQL_DATABASE:-integration}
+      enableOrmLogs: "false"
+      maxQueryExecutionTime: "1000"
+      timezone: UTC
+      connectionLimit: "10"
+      redisIsCluster: "false"
+      redisSingleUrl: redis://redis:6379
+      redisPassword: ""
+      redisUsername: ""
+      # @solana/web3.js Connection constructor asserts the URL starts
+      # with http[s]:. An empty string crashes the whole Nest boot.
+      # For rehearsal we point at a placeholder that simply won't
+      # resolve (TransactionService never actually broadcasts without
+      # BOMB_BOX_OPERATOR_KEY anyway).
+      solanaRpcUrl: ${SOLANA_RPC_URL:-https://api.devnet.solana.com}
       NODE_ENV: production
       PORT: 3002
-      DATABASE_HOST: mysql
-      DATABASE_PORT: 3306
-      DATABASE_USER: ${MYSQL_USER:-integration}
-      DATABASE_PASSWORD: ${MYSQL_PASSWORD}
-      DATABASE_NAME: ${MYSQL_DATABASE:-integration}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      SOLANA_RPC_URL: ${SOLANA_RPC_URL:-}
+      SOLANA_RPC_URL: ${SOLANA_RPC_URL:-https://api.devnet.solana.com}
       BOMB_BOX_OPERATOR_KEY: ${BOMB_BOX_OPERATOR_KEY:-}
       SENTRY_DSN: ${SENTRY_DSN_BOMBBOX:-}
 

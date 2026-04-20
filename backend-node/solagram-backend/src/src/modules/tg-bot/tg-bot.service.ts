@@ -2,7 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { AppLoggerService } from '../../common/utils-service/logger.service';
 import { AppConfigService } from '../../common/utils-service/app.config.services';
 import { BotMessageService } from './message.service';
-import TelegramBot, { Update } from 'node-telegram-bot-api';
+// The decompiled `import TelegramBot from 'node-telegram-bot-api'`
+// produces `require(...).default` which is undefined (the module is a
+// bare class export). Rewrite as TS import-equals so TelegramBot is
+// both a value and a type.
+import TelegramBot = require('node-telegram-bot-api');
+import type { Update } from 'node-telegram-bot-api';
 import { BotStatisticsService } from '../bot-statistics/bot-statistics.service';
 
 @Injectable()
@@ -19,6 +24,13 @@ export class TgBotService {
     private processingMessages: any;
     async initBot() {
             const token = this.appConfig.tgBotInfo.walletBotToken;
+            if (!token) {
+                // Rehearsal / CI mode: no Telegram token provided. Skip
+                // bot construction entirely so the Nest app can still
+                // boot. Webhook routes will be no-ops.
+                this.logger.warn('[initBot] no walletBotToken configured — bot disabled');
+                return;
+            }
             this.bot = new TelegramBot(token, {
                 webHook: true,
             });

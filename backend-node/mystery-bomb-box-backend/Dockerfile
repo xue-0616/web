@@ -14,6 +14,8 @@ RUN if [ -f package-lock.json ]; then npm ci --ignore-scripts --legacy-peer-deps
     else npm install --ignore-scripts --legacy-peer-deps; fi
 
 COPY . .
+# Wipe stale pre-compiled dist/ (see solagram Dockerfile comment).
+RUN rm -rf dist
 RUN npm run build
 
 # ---- runtime ----
@@ -40,4 +42,4 @@ EXPOSE 3002
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD curl -sf "http://127.0.0.1:${PORT}/health" || exit 1
 
-CMD ["node", "dist/src/main.js"]
+CMD ["node", "dist/src/src/main.js"]
