@@ -142,6 +142,26 @@ pub fn solve_batch(
                     result.refunded.push((*id, "Insufficient staked".to_string()));
                     continue;
                 }
+                // MED-FM-1: refuse to silently `saturating_sub` the
+                // pool's total when the per-user check passes but
+                // the pool counter would underflow — that combination
+                // is only possible if our pool snapshot drifted from
+                // the chain (or two sequencers raced against the same
+                // intent). Refunding the intent and aborting this
+                // step is safer than letting `total_staked` clamp
+                // to 0 and corrupt every subsequent reward
+                // calculation in the batch.
+                let new_total = match state.total_staked.checked_sub(intent.amount) {
+                    Some(v) => v,
+                    None => {
+                        result.refunded.push((
+                            *id,
+                            "Pool total_staked underflow — pool/user state desync"
+                                .to_string(),
+                        ));
+                        continue;
+                    }
+                };
                 let pending = pending_reward(
                     pos.staked,
                     state.acc_reward_per_share,
@@ -149,7 +169,7 @@ pub fn solve_batch(
                 );
                 pos.staked = pos.staked.saturating_sub(intent.amount);
                 pos.reward_debt = pos.new_debt(state.acc_reward_per_share);
-                state.total_staked = state.total_staked.saturating_sub(intent.amount);
+                state.total_staked = new_total;
                 result.withdraw_events.push(types::WithdrawEvent {
                     intent_id: *id,
                     farm_type_hash: intent.farm_type_hash,
@@ -175,6 +195,20 @@ pub fn solve_batch(
                     result.refunded.push((*id, "Insufficient staked".to_string()));
                     continue;
                 }
+                // MED-FM-1 (mirror of Withdraw above): refuse a
+                // pool-level underflow that would only happen on
+                // pool/user desync.
+                let new_total = match state.total_staked.checked_sub(intent.amount) {
+                    Some(v) => v,
+                    None => {
+                        result.refunded.push((
+                            *id,
+                            "Pool total_staked underflow — pool/user state desync"
+                                .to_string(),
+                        ));
+                        continue;
+                    }
+                };
                 let pending = pending_reward(
                     pos.staked,
                     state.acc_reward_per_share,
@@ -182,7 +216,7 @@ pub fn solve_batch(
                 );
                 pos.staked = pos.staked.saturating_sub(intent.amount);
                 pos.reward_debt = pos.new_debt(state.acc_reward_per_share);
-                state.total_staked = state.total_staked.saturating_sub(intent.amount);
+                state.total_staked = new_total;
                 // Emit a WithdrawEvent carrying the pending reward;
                 // the reward-emitting CKB transaction uses the
                 // pending_reward field exactly as for a Harvest.
@@ -334,6 +368,33 @@ mod tests {
             "second withdraw (800 > running stake 200) must be refunded, \
              not silently executed");
         assert_eq!(r.refunded[0].0, 2, "refund is for intent 2");
+    }
+
+    /// MED-FM-1 regression: a withdraw whose per-user check passes
+    /// but whose amount exceeds `state.total_staked` (pool/user
+    /// state desync) must be refunded with a clear reason — not
+    /// silently saturated to 0, which would corrupt every
+    /// subsequent reward calculation in this batch.
+    #[test]
+    fn med_fm_1_pool_underflow_refunds_not_saturates() {
+        let mut pool = mk_pool();
+        // Pool only has 100 staked, but the user's snapshot claims
+        // 500. This is the exact "snapshot drift" scenario the
+        // checked_sub guards against.
+        pool.total_staked = 100;
+        let user = [3u8; 32];
+        let w = mk_intent(FarmIntentType::Withdraw, user, 500, 500, 0);
+        let r = solve_batch(&[(42, w)], &pool, 100);
+
+        assert!(r.withdraw_events.is_empty(),
+            "withdraw must NOT execute when pool would underflow");
+        assert_eq!(r.refunded.len(), 1);
+        assert_eq!(r.refunded[0].0, 42);
+        assert!(r.refunded[0].1.contains("underflow"),
+            "refund reason should explain the desync, was {:?}",
+            r.refunded[0].1);
+        assert_eq!(r.new_pool_state.total_staked, 100,
+            "pool state must be untouched on refund");
     }
 
     #[test]

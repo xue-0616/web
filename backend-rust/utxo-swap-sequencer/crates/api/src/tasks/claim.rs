@@ -135,18 +135,17 @@ pub async fn handler(
     })))
 }
 
+/// Look the reward up in the shared task catalog.
+///
+/// HIGH-SW-2: the previous version of this function carried both
+/// a dead `Vec` of string-keyed task definitions AND a hand-written
+/// `match` on integer ids whose rewards disagreed with the dead
+/// Vec. Both `tasks/list.rs` and the front-end had their own copies
+/// of the same data, all four out of sync. The catalog module
+/// (`super::catalog`) is now the only place rewards live; this
+/// function is a thin lookup that maps the "unknown id" case to a
+/// proper 400 for the API surface.
 fn get_task_reward(task_id: u64) -> Result<u64, ApiError> {
-    // Load task definition from config
-    let tasks = vec![
-        ("swap_first", 50u64, "Complete your first swap"),
-        ("swap_10", 200, "Complete 10 swaps"),
-        ("add_liq", 100, "Add liquidity to any pool"),
-        ("referral", 300, "Refer a friend"),
-    ];
-    match task_id {
-        1 => Ok(100),  // First Swap
-        2 => Ok(200),  // Add Liquidity
-        3 => Ok(50),   // Daily swap
-        _ => Err(ApiError::BadRequest(format!("Unknown task_id: {}", task_id))),
-    }
+    super::catalog::reward_for(task_id)
+        .ok_or_else(|| ApiError::BadRequest(format!("Unknown task_id: {}", task_id)))
 }

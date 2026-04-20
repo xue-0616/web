@@ -44,11 +44,27 @@ pub fn configure_routes(cfg: &mut web::ServiceConfig) {
                 "/configurations",
                 web::get().to(configurations::get_configurations),
             )
-            // Accounts — login is public (it creates the JWT)
+            // Accounts — login is public (it creates the JWT).
+            // CRIT-SW-3: /accounts/info used to live inside the same
+            // /accounts scope and rely on a hand-rolled JWT decode in
+            // the handler. That was fragile in two ways:
+            //   * a future maintainer adding /accounts/* read-only
+            //     routes would silently inherit "no middleware" and
+            //     might forget the inline check;
+            //   * the inline check used `Validation::default()` which
+            //     does NOT pin algorithm/iss/aud, while the real
+            //     `JwtAuth` middleware does (see
+            //     `utils::oauth_middleware::middleware::JwtAuth`).
+            // Move /info into its own /accounts-auth scope guarded by
+            // the same `JwtAuth` middleware every other authenticated
+            // endpoint uses (mirror of /tasks vs /tasks-auth).
             .service(
                 web::scope("/accounts")
-                    .route("/login", web::post().to(accounts::login::login))
-                    // Info requires auth — handled via inline JWT check in handler
+                    .route("/login", web::post().to(accounts::login::login)),
+            )
+            .service(
+                web::scope("/accounts-auth")
+                    .wrap(JwtAuth::new(jwt_secret.clone()))
                     .route("/info", web::get().to(accounts::info::get_account_info)),
             )
             // Intent status query (read-only, public)

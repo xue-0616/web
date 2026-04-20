@@ -158,6 +158,88 @@ mod tests {
         assert_eq!(span, MAX_WINDOW_SECONDS);
     }
 
+    /// Build a `pool_statistics::Model` with just the fields
+    /// `aggregate_candles` actually reads.
+    fn stat(ts_secs: i64, price: i64, vol: i64) -> pool_statistics::Model {
+        pool_statistics::Model {
+            id: 0,
+            pool_type_hash: vec![0u8; 32],
+            asset_x_amount: None,
+            asset_y_amount: None,
+            price: Some(rust_decimal::Decimal::from(price)),
+            tvl: None,
+            volume: Some(rust_decimal::Decimal::from(vol)),
+            txs_count: None,
+            created_at: chrono::DateTime::from_timestamp(ts_secs, 0)
+                .unwrap()
+                .naive_utc(),
+        }
+    }
+
+    /// HIGH-SW-7 regression: a gap of 3 empty buckets between two
+    /// trades must produce 3 doji continuation candles, not be
+    /// silently absorbed into the next "real" candle.
+    #[test]
+    fn high_sw_7_gap_fills_with_continuation_candles() {
+        // 60-second candles. First trade at t=0, next trade at
+        // t=240 — that's 4 buckets later, so we expect:
+        //   [0..60)   : real, single trade  -> close = 100
+        //   [60..120) : doji, vol 0, OHLC = 100
+        //   [120..180): doji, vol 0, OHLC = 100
+        //   [180..240): doji, vol 0, OHLC = 100
+        //   [240..)   : real, in-progress, opens at 100 closes at 110
+        let stats = vec![stat(0, 100, 5), stat(240, 110, 7)];
+        let candles = aggregate_candles(&stats, 60);
+        assert_eq!(candles.len(), 5,
+            "expected 5 candles (1 real + 3 gap + 1 in-progress), \
+             got {}: {:#?}", candles.len(), candles);
+
+        // First real candle.
+        assert_eq!(candles[0].open, "100");
+        assert_eq!(candles[0].close, "100");
+        assert_eq!(candles[0].volume, "5");
+
+        // Three gap-fill candles: zero volume, flat OHLC.
+        for (i, c) in candles[1..=3].iter().enumerate() {
+            assert_eq!(c.volume, "0",
+                "gap candle {} must have zero volume", i + 1);
+            assert_eq!(c.open, "100",
+                "gap candle {} open must equal previous close", i + 1);
+            assert_eq!(c.close, "100",
+                "gap candle {} close must equal previous close", i + 1);
+            assert_eq!(c.high, "100");
+            assert_eq!(c.low, "100");
+        }
+
+        // Final in-progress candle starts at the previous close
+        // (continuity), absorbs the new trade, ends at 110.
+        assert_eq!(candles[4].open, "100",
+            "candle after gap must open at previous close, not at 110");
+        assert_eq!(candles[4].close, "110");
+        assert_eq!(candles[4].volume, "7");
+    }
+
+    #[test]
+    fn high_sw_7_no_gap_emits_two_candles() {
+        // Two trades in adjacent 60-s buckets — no gap-fill needed.
+        let stats = vec![stat(0, 100, 1), stat(70, 105, 2)];
+        let candles = aggregate_candles(&stats, 60);
+        assert_eq!(candles.len(), 2);
+        assert_eq!(candles[0].close, "100");
+        assert_eq!(candles[1].open, "100",
+            "second candle should still open at first close (continuity)");
+        assert_eq!(candles[1].close, "105");
+    }
+
+    #[test]
+    fn high_sw_7_zero_interval_returns_empty_not_infinite_loop() {
+        // Defence-in-depth: handler validates the interval but the
+        // function should fail safe if called with 0.
+        let stats = vec![stat(0, 100, 1), stat(60, 110, 1)];
+        let candles = aggregate_candles(&stats, 0);
+        assert!(candles.is_empty());
+    }
+
     #[test]
     fn default_window_is_seven_days() {
         // When the client omits both bounds the handler derives
@@ -169,11 +251,57 @@ mod tests {
     }
 }
 
+/// Bucket the raw `pool_statistics` rows into fixed-width
+/// candlesticks of `interval_seconds`.
+///
+/// # HIGH-SW-7 — gap handling fix
+///
+/// The previous implementation:
+///
+/// ```ignore
+/// if ts - current_start >= interval_seconds {
+///     flush();
+///     current_start += interval_seconds;   // advance ONE bucket
+///     open = price.clone();                // open := this point
+/// }
+/// ```
+///
+/// had two bugs that combined to corrupt charts whenever data was
+/// sparse (which is most of the time on lightly-traded pools):
+///
+/// 1. **Skipped intervals.** If the next data point fell two or
+///    more buckets ahead, the loop only advanced `current_start`
+///    by one bucket. The flushed candle's timestamp was correct,
+///    but every subsequent bucket up until the new point was
+///    silently absorbed into the *next* candle. The chart was
+///    missing intervals.
+///
+/// 2. **Discontinuous open.** When a new bucket started after a
+///    gap, `open` was set to the new data point's price rather
+///    than the previous candle's `close`. Trading-view–style
+///    charts assume continuity (a "doji" of unchanged price for
+///    quiet periods); breaking that produced phantom price jumps.
+///
+/// The new loop:
+///
+///   * `while ts - current_start >= interval_seconds` instead of
+///     `if`, so every empty bucket between two real data points
+///     gets a flat candle of its own with `open == high == low ==
+///     close == previous_close` and `volume = 0`;
+///   * the new "real" candle (the one that actually contains the
+///     incoming point) starts with `open := previous_close`, so
+///     prices remain continuous across gaps.
 fn aggregate_candles(
     stats: &[pool_statistics::Model],
     interval_seconds: i64,
 ) -> Vec<CandlestickData> {
     if stats.is_empty() {
+        return Vec::new();
+    }
+    // Defensive: a non-positive interval would loop forever in the
+    // gap-fill below. Should be impossible — `handler` validates
+    // it via the candlestick_type match — but guard anyway.
+    if interval_seconds <= 0 {
         return Vec::new();
     }
 
@@ -190,8 +318,11 @@ fn aggregate_candles(
         let price = stat.price.clone().unwrap_or_default();
         let vol = stat.volume.clone().unwrap_or_default();
 
-        if ts - current_start >= interval_seconds {
-            // Flush current candle
+        // Drain *every* bucket strictly older than `ts`. The first
+        // iteration flushes the bucket the loop is currently
+        // building; subsequent iterations emit zero-volume
+        // continuation candles for any silent buckets in between.
+        while ts - current_start >= interval_seconds {
             candles.push(CandlestickData {
                 open: open.to_string(),
                 high: high.to_string(),
@@ -203,11 +334,14 @@ fn aggregate_candles(
                     .to_rfc3339(),
             });
 
-            // Start new candle
             current_start += interval_seconds;
-            open = price.clone();
-            high = price.clone();
-            low = price.clone();
+            // Continuity: the next candle inherits the close
+            // price as its open/high/low/close baseline. If this
+            // candle ends up empty too, it'll be flushed in the
+            // next iteration as a flat doji.
+            open = close.clone();
+            high = close.clone();
+            low = close.clone();
             volume = rust_decimal::Decimal::ZERO;
         }
 
@@ -221,7 +355,7 @@ fn aggregate_candles(
         volume += vol;
     }
 
-    // Flush last candle
+    // Flush the final in-progress bucket (always at least one).
     candles.push(CandlestickData {
         open: open.to_string(),
         high: high.to_string(),

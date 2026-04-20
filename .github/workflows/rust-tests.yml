@@ -173,6 +173,27 @@ jobs:
           workspaces: backend-rust/utxo-swap-sequencer
       - name: test molecule parser regression
         run: cargo test -p api --lib intents::swap_exact_input_for_output::tests
+      - name: test candlestick gap-fill + window math (HIGH-SW-6 / HIGH-SW-7)
+        # 8 tests:
+        #   HIGH-SW-6: window_limit_constants_match_docstrings,
+        #     window_math_rejects_inverted_range / over_one_year /
+        #     accepts_exact_one_year, default_window_is_seven_days
+        #   HIGH-SW-7: high_sw_7_gap_fills_with_continuation_candles,
+        #     high_sw_7_no_gap_emits_two_candles,
+        #     high_sw_7_zero_interval_returns_empty_not_infinite_loop
+        run: cargo test -p api --lib pools::candlestick::tests
+      - name: test task catalog drift guard (HIGH-SW-2 / HIGH-SW-3)
+        # 3 tests pinning the canonical task table that both
+        # tasks/claim.rs and tasks/list.rs now read:
+        #   catalog_ids_are_unique_and_dense_from_one
+        #   catalog_rewards_are_nonzero_and_finite
+        #   reward_for_matches_table
+        run: cargo test -p api --lib tasks::catalog::tests
+      - name: test price-oracle liquidity gate (MED-SW-5)
+        # 5 tests pinning the env-var-tunable threshold and its
+        # defaults — serial via explicit Mutex, so `--test-threads=1`
+        # is not required.
+        run: cargo test -p utils --lib tokens_manager::price_oracle::med_sw_5_tests
 
   utxoswap-farm-sequencer-purefuncs:
     # Gates the two pure-function test suites added in the BUG-P1

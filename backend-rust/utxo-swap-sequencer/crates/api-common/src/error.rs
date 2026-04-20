@@ -22,6 +22,16 @@ pub enum ApiError {
     IntentError(String),
     #[error("Pool error: {0}")]
     PoolError(String),
+    /// MED-SW-1: 501 Not Implemented for endpoints whose route is
+    /// reserved but whose handler isn't wired up yet. The audit
+    /// flagged that returning `Internal("Not yet implemented")` —
+    /// which mapped to a generic 500 — was indistinguishable from
+    /// a real server bug, so monitoring couldn't separate "client
+    /// hit a not-yet-built feature" from "the service crashed".
+    /// Mapping these to 501 makes the distinction explicit AND
+    /// stops the `tracing::error!` spam every Internal triggers.
+    #[error("Not implemented: {0}")]
+    NotImplemented(String),
 }
 
 #[derive(Serialize)]
@@ -68,6 +78,13 @@ impl ResponseError for ApiError {
             }
             ApiError::IntentError(msg) => (actix_web::http::StatusCode::BAD_REQUEST, msg.clone()),
             ApiError::PoolError(msg) => (actix_web::http::StatusCode::BAD_REQUEST, msg.clone()),
+            ApiError::NotImplemented(msg) => {
+                // Deliberately info-level (not error): a stub
+                // endpoint being hit is expected behaviour during
+                // early integration, not an alert-worthy event.
+                tracing::info!("Not implemented endpoint hit: {}", msg);
+                (actix_web::http::StatusCode::NOT_IMPLEMENTED, msg.clone())
+            }
         };
 
         HttpResponse::build(status).json(ErrorResponse {

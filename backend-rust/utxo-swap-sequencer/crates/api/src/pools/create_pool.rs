@@ -19,5 +19,9 @@ pub async fn handler(
     //       2. Validate asset pair doesn't exist
     //       3. Submit tx to CKB
     //       4. Create pool record in DB
-    Err(ApiError::Internal("Not yet implemented".to_string()))
+    // MED-SW-1: pool creation flow needs CKB tx submission +
+    // duplicate-pair check before flipping to a real handler.
+    Err(ApiError::NotImplemented(
+        "pool creation is not yet wired up".to_string(),
+    ))
 }

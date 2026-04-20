@@ -17,5 +17,8 @@ pub async fn handler(
     use entity_crate::intents;
     use sea_orm::*;
     tracing::info!("Processing remove liquidity intent");
-    Err(ApiError::Internal("Not yet implemented".to_string()))
+    // MED-SW-1
+    Err(ApiError::NotImplemented(
+        "remove-liquidity intent submission is not yet wired up".to_string(),
+    ))
 }

@@ -8,6 +8,95 @@ use std::collections::HashMap;
 /// CKB native token type_hash (all zeros = CKB)
 const CKB_TYPE_HASH: [u8; 32] = [0u8; 32];
 
+/// MED-SW-5: minimum USD-equivalent liquidity on the *known* side
+/// of a pool before we are willing to derive the *unknown* side's
+/// price from that pool.
+///
+/// The previous implementation propagated price out of any pool with
+/// a non-zero reserve. An attacker who could mint a low-cap token,
+/// open a tiny pool against CKB with skewed reserves, and then trade
+/// in either direction could force the oracle to price that token
+/// at any value they liked — and once derived, that price would
+/// then propagate to *other* pools featuring that token in the
+/// next pass, distorting TVL, dayApr, and the popular-token
+/// ranking.
+///
+/// `$1 000` is large enough that the round-trip slippage cost of
+/// manipulating a sub-threshold pool exceeds any realistic gain
+/// from poisoning the oracle, but small enough that legitimate
+/// long-tail pools (typically seeded with $5–10k) are unaffected.
+/// Tunable via env var `PRICE_ORACLE_MIN_USD_LIQUIDITY` for
+/// deployment-specific calibration.
+const DEFAULT_MIN_PRICE_SOURCE_USD: i64 = 1_000;
+
+fn min_price_source_usd() -> Decimal {
+    std::env::var("PRICE_ORACLE_MIN_USD_LIQUIDITY")
+        .ok()
+        .and_then(|s| s.parse::<i64>().ok())
+        .filter(|v| *v >= 0)
+        .map(Decimal::from)
+        .unwrap_or_else(|| Decimal::from(DEFAULT_MIN_PRICE_SOURCE_USD))
+}
+
+#[cfg(test)]
+mod med_sw_5_tests {
+    //! MED-SW-5 unit tests. We can't exercise the full
+    //! `update_prices` path without a live MySQL + Redis, but we
+    //! CAN pin the constant and the env-var override that together
+    //! define the oracle's trust boundary.
+    //!
+    //! Tests mutate the `PRICE_ORACLE_MIN_USD_LIQUIDITY` env var
+    //! and run serially within this module via the `#[serial]`
+    //! annotation replaced by an explicit Mutex — we don't want to
+    //! pull in the `serial_test` dep just for this.
+    use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn default_threshold_matches_docstring() {
+        let _g = ENV_LOCK.lock().unwrap();
+        std::env::remove_var("PRICE_ORACLE_MIN_USD_LIQUIDITY");
+        assert_eq!(min_price_source_usd(), Decimal::from(1_000));
+    }
+
+    #[test]
+    fn env_var_overrides_default() {
+        let _g = ENV_LOCK.lock().unwrap();
+        std::env::set_var("PRICE_ORACLE_MIN_USD_LIQUIDITY", "5000");
+        assert_eq!(min_price_source_usd(), Decimal::from(5_000));
+        std::env::remove_var("PRICE_ORACLE_MIN_USD_LIQUIDITY");
+    }
+
+    #[test]
+    fn env_var_rejects_garbage_and_falls_back_to_default() {
+        let _g = ENV_LOCK.lock().unwrap();
+        std::env::set_var("PRICE_ORACLE_MIN_USD_LIQUIDITY", "not-a-number");
+        assert_eq!(min_price_source_usd(), Decimal::from(1_000));
+        std::env::remove_var("PRICE_ORACLE_MIN_USD_LIQUIDITY");
+    }
+
+    #[test]
+    fn env_var_rejects_negative() {
+        let _g = ENV_LOCK.lock().unwrap();
+        // Negative values would invert the gate; filter rejects them
+        // and we fall back to the default (never to "no gate at all").
+        std::env::set_var("PRICE_ORACLE_MIN_USD_LIQUIDITY", "-1");
+        assert_eq!(min_price_source_usd(), Decimal::from(1_000));
+        std::env::remove_var("PRICE_ORACLE_MIN_USD_LIQUIDITY");
+    }
+
+    #[test]
+    fn zero_threshold_is_allowed() {
+        // Operators may want to disable the gate in a test env.
+        let _g = ENV_LOCK.lock().unwrap();
+        std::env::set_var("PRICE_ORACLE_MIN_USD_LIQUIDITY", "0");
+        assert_eq!(min_price_source_usd(), Decimal::ZERO);
+        std::env::remove_var("PRICE_ORACLE_MIN_USD_LIQUIDITY");
+    }
+}
+
 /// Update token prices from pool data and external sources (CMC API)
 pub async fn update_prices(ctx: &AppContext) -> anyhow::Result<()> {
     // 1. Fetch CKB/USD price from CoinMarketCap, fall back to Redis cache (not a hardcoded value)
@@ -45,7 +134,13 @@ pub async fn update_prices(ctx: &AppContext) -> anyhow::Result<()> {
         .map(|t| (t.type_hash.clone(), t.decimals))
         .collect();
 
-    // Multi-pass price derivation: derive prices from pools where one side is known
+    // Multi-pass price derivation: derive prices from pools where one
+    // side is known. MED-SW-5: skip any pool whose KNOWN side is
+    // worth less than `min_price_source_usd()`. The known side gives
+    // us a USD figure for free (price_known × reserve_known_norm); a
+    // pool below threshold can't move the oracle even if its
+    // unknown-side reserve is wildly skewed.
+    let min_liquidity_usd = min_price_source_usd();
     for _pass in 0..3 {
         for pool in &all_pools {
             if let (Some(x_amount), Some(y_amount)) = (&pool.asset_x_amount, &pool.asset_y_amount) {
@@ -65,6 +160,18 @@ pub async fn update_prices(ctx: &AppContext) -> anyhow::Result<()> {
                         // price_y = price_x * (reserve_x / 10^x_dec) / (reserve_y / 10^y_dec)
                         let x_norm = x_amount / Decimal::from(10u64.pow(x_dec as u32));
                         let y_norm = y_amount / Decimal::from(10u64.pow(y_dec as u32));
+                        // Liquidity gate on the KNOWN side only; we
+                        // can't yet evaluate the unknown side in USD.
+                        let known_usd = px * x_norm;
+                        if known_usd < min_liquidity_usd {
+                            tracing::debug!(
+                                pool_id = pool.id,
+                                known_usd = %known_usd,
+                                min_required = %min_liquidity_usd,
+                                "skip price derivation: pool below MED-SW-5 liquidity threshold",
+                            );
+                            continue;
+                        }
                         if !y_norm.is_zero() {
                             let py = px * x_norm / y_norm;
                             price_map.insert(y_hash.clone(), py);
@@ -73,6 +180,16 @@ pub async fn update_prices(ctx: &AppContext) -> anyhow::Result<()> {
                     (None, Some(py)) => {
                         let x_norm = x_amount / Decimal::from(10u64.pow(x_dec as u32));
                         let y_norm = y_amount / Decimal::from(10u64.pow(y_dec as u32));
+                        let known_usd = py * y_norm;
+                        if known_usd < min_liquidity_usd {
+                            tracing::debug!(
+                                pool_id = pool.id,
+                                known_usd = %known_usd,
+                                min_required = %min_liquidity_usd,
+                                "skip price derivation: pool below MED-SW-5 liquidity threshold",
+                            );
+                            continue;
+                        }
                         if !x_norm.is_zero() {
                             let px = py * y_norm / x_norm;
                             price_map.insert(x_hash.clone(), px);

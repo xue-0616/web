@@ -110,13 +110,48 @@ pub async fn handler(
         );
     }
 
+    // 4. MED-FM-3: reject duplicate farm pools on the same LP token.
+    //    Without this check, an authorized admin could accidentally
+    //    submit two create-pool intents for the same LP token (e.g.
+    //    retry after a network blip) and end up with two rows in
+    //    `farm_pools`. The frontend picks "the" pool by LP token
+    //    hash, so a duplicate silently fragments staking: some users
+    //    deposit into pool A, others into pool B, and the reward
+    //    accounting never reconciles. Since pool creation is a rare
+    //    admin-only operation, a conservative "first write wins, the
+    //    rest get a 409-style BadRequest" is exactly what we want.
+    //
+    //    We match on the `lp_token_type_hash` only; two *different*
+    //    reward-token configurations on the same LP are still
+    //    disallowed here because no UI we ship exposes that choice,
+    //    and allowing it would re-open the fragmentation hole.
+    use entity_crate::farm_pools;
+    use sea_orm::*;
+    let existing = farm_pools::Entity::find()
+        .filter(farm_pools::Column::LpTokenTypeHash.eq(_lp_hash.clone()))
+        .one(ctx.db())
+        .await
+        .map_err(|e| ApiError::Internal(format!("farm_pools lookup: {}", e)))?;
+    if let Some(pool) = existing {
+        tracing::warn!(
+            "Rejected create-pool: farm pool id={} already exists for LP token {}",
+            pool.id,
+            req.lp_token_type_hash
+        );
+        return Err(ApiError::BadRequest(format!(
+            "A farm pool already exists for LP token {} (pool id = {}). \
+             Duplicate pools would fragment liquidity.",
+            req.lp_token_type_hash, pool.id
+        )));
+    }
+
     tracing::info!(
         "Create pool intent accepted from admin {} for LP token {}",
         req.creator_address,
         req.lp_token_type_hash
     );
 
-    // 4. Check that the LP token type hash corresponds to a valid UTXOSwap pool
+    // 5. Check that the LP token type hash corresponds to a valid UTXOSwap pool
     // (would query UTXOSwap sequencer API or on-chain data)
 
     Ok(ApiSuccess::json(serde_json::json!({

@@ -14,5 +14,12 @@ pub async fn handler(
     // Calculate required input: amount_in = (reserve_in * amount_out * 10000) / ((reserve_out - amount_out) * (10000 - fee_bps)) + 1
     // Reuse common intent submission logic from swap_exact_input_for_output
     tracing::info!("Processing swap-input-for-exact-output intent");
-    Err(ApiError::Internal("Not yet implemented".to_string()))
+    // MED-SW-1: 501, not 500. The exact-output swap variant is a
+    // reserved endpoint pending integration of the inverse AMM math
+    // (`amount_in = (Rin*Aout*1e4) / ((Rout-Aout)*(1e4-fee)) + 1`).
+    Err(ApiError::NotImplemented(
+        "swap-input-for-exact-output is not yet wired up; use \
+         /intents/swap-exact-input-for-output instead"
+            .to_string(),
+    ))
 }
