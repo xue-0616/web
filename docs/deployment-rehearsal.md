@@ -1,6 +1,6 @@
-# Deployment Rehearsal — 6 Fund-Critical Services
+# Deployment Rehearsal — 7 Fund-Critical Services
 
-**Goal:** stand up the three hardened Node backends and three hardened
+**Goal:** stand up the three hardened Node backends and four hardened
 Rust services **locally against devnet/testnet RPC** to verify the
 code, Dockerfiles, and environment-variable surface work end-to-end
 before any production pushes.
@@ -19,13 +19,16 @@ observability scraping, secret rotation. Those come after rehearsal.
 | 3002 | `mystery-bomb-box-backend` | Bomb-box lottery backend |
 | 3306 | MySQL 8 | Shared DB for Node + Rust services |
 | 6379 | Redis 7 | Distributed locks, bull queues, rate-limit |
+| 8080 | `utxo-swap-sequencer` (Rust) | CKB UTXOSwap mediator; serves `/api/v1/configurations` |
 | 8085 | `unipass-wallet-relayer` (Rust) | EVM meta-tx relayer |
 | 8086 | `utxoswap-farm-sequencer` (Rust) | CKB farm sequencer |
 | 8087 | `huehub-token-distributor` (Rust) | CKB xUDT distributor |
 
-All six services expose `/health` (legacy) and the three Rust ones
-additionally expose `/healthz`, `/readyz`, and `/metrics` (Prometheus
-exposition format) from the shared `huehub-observability` crate.
+All seven services expose `/health` (legacy). `unipass-wallet-relayer`
+and `utxoswap-farm-sequencer` additionally expose `/healthz`,
+`/readyz`, and `/metrics` (Prometheus exposition format) from the
+shared `huehub-observability` crate. `utxo-swap-sequencer` ships a
+plain `/health` only — it doesn't depend on the observability crate.
 
 ---
 
@@ -100,7 +103,7 @@ runs hit the cargo-registry cache mount and finish in under 2 min.
 Health probes should all come back `200 OK`:
 
 ```bash
-for port in 3000 3001 3002 8085 8086 8087; do
+for port in 3000 3001 3002 8080 8085 8086 8087; do
   printf "%s → " "$port"
   curl -sf "http://127.0.0.1:${port}/health" && echo
 done
@@ -125,7 +128,7 @@ Once the stack is healthy, run:
 
 ```bash
 bash scripts/guardrail-smoke.sh                 # default ports
-SKIP_SWAP=1 bash scripts/guardrail-smoke.sh     # if swap-seq not up
+SKIP_SWAP=1 bash scripts/guardrail-smoke.sh     # skip the swap-seq block
 ```
 
 The script probes each fail-closed endpoint and asserts the expected
@@ -134,9 +137,10 @@ for auth-guarded routes called without credentials). It exits 0 on
 pass and non-zero on any real regression — stub endpoints silently
 returning 200, or 500s where the contract says 503, will fail here.
 
-Swap-sequencer is not yet part of `docker-compose.integration.yml`,
-so by default those assertions skip (reported as `SKIP`, not `FAIL`).
-Bring up swap-seq separately and set `SWAP_PORT=…` to include them.
+With the full compose stack up, expect **10/10 pass, 0 skipped**.
+`SKIP_SWAP=1` is available for running the script against a bare
+relayer + farm-seq environment (it drops the 6 swap-seq
+assertions but still validates the farm-seq fail-closed contract).
 
 Prometheus scrape (should dump actix-web HTTP metrics):
 

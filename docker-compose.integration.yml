@@ -224,6 +224,65 @@ services:
       SLACK_WEBHOOK: ${SLACK_WEBHOOK:-}
       CORS_ALLOWED_ORIGINS: ${FARM_CORS_ORIGINS:-}
 
+  utxo-swap-sequencer:
+    # Fourth Rust service added in the round-6 hardening pass. Not a
+    # fund-critical component in the same sense as relayer / farm-seq
+    # (it mediates swaps against UTXOSwap pools but doesn't hold user
+    # keys), but shipping it here lets `scripts/guardrail-smoke.sh`
+    # validate the 501 / 503 / 401 contract end-to-end without a
+    # separate cargo-run in a second terminal.
+    #
+    # Rehearsal env deliberately LEAVES the five deployment hash env
+    # vars unset (SEQUENCER_LOCK_CODE_HASH, SEQUENCER_LOCK_ARGS,
+    # POOL_TYPE_CODE_HASH, CONFIGS_CELL_TYPE_HASH,
+    # DEPLOYMENT_CELL_TYPE_HASH) so the `/configurations` endpoint
+    # returns 503 as documented in §4a. Operators targeting a real
+    # deployment set them in `.env.integration`; that flips the
+    # endpoint to 200 with the real surface.
+    build:
+      <<: *rust-build
+      args:
+        SERVICE: utxo-swap-sequencer
+    image: utxo-swap-sequencer:integration
+    restart: unless-stopped
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    ports: ["8080:8080"]
+    environment:
+      PORT: 8080
+      DATABASE_URL: mysql://${MYSQL_USER:-integration}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-integration}
+      REDIS_URL: redis://redis:6379
+      RUST_LOG: info
+      # JWT_SECRET shared with every service that validates JWTs so
+      # a single auth flow works across the stack. The service
+      # refuses to start if it's absent or shorter than 32 bytes
+      # (M-2 guardrail), so use the same value as farm-seq.
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.integration}
+      # CKB RPC placeholder — swap-seq doesn't panic without it, but
+      # the liquidity-pairs background loop logs warnings every tick.
+      CKB_RPC_URL: ${CKB_RPC_URL:-http://placeholder-ckb-rpc:8114}
+      CKB_INDEXER_URL: ${CKB_INDEXER_URL:-http://placeholder-ckb-indexer:8116}
+      # MED-SW-5: price oracle liquidity floor ($1000 default). Set
+      # PRICE_ORACLE_MIN_USD_LIQUIDITY=0 only in a throwaway test env.
+      PRICE_ORACLE_MIN_USD_LIQUIDITY: ${PRICE_ORACLE_MIN_USD_LIQUIDITY:-}
+      # MED-SW-2: the five deployment hashes. Leaving them empty is
+      # the documented rehearsal posture (/configurations -> 503).
+      SEQUENCER_LOCK_CODE_HASH: ${SEQUENCER_LOCK_CODE_HASH:-}
+      SEQUENCER_LOCK_HASH_TYPE: ${SEQUENCER_LOCK_HASH_TYPE:-1}
+      SEQUENCER_LOCK_ARGS: ${SEQUENCER_LOCK_ARGS:-}
+      POOL_TYPE_CODE_HASH: ${POOL_TYPE_CODE_HASH:-}
+      CONFIGS_CELL_TYPE_HASH: ${CONFIGS_CELL_TYPE_HASH:-}
+      DEPLOYMENT_CELL_TYPE_HASH: ${DEPLOYMENT_CELL_TYPE_HASH:-}
+      SWAP_FEE_BPS: ${SWAP_FEE_BPS:-30}
+      MIN_LIQUIDITY: ${MIN_LIQUIDITY:-1000}
+      MAX_INTENTS_PER_BATCH: ${MAX_INTENTS_PER_BATCH:-50}
+      BATCH_INTERVAL_MS: ${BATCH_INTERVAL_MS:-3000}
+      SLACK_WEBHOOK: ${SLACK_WEBHOOK:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      SEQUENCER_UTXO_GLOBAL_API_KEY: ${SEQUENCER_UTXO_GLOBAL_API_KEY:-}
+      CORS_ALLOWED_ORIGINS: ${SWAP_CORS_ORIGINS:-}
+
   huehub-token-distributor:
     build:
       <<: *rust-build
@@ -254,6 +313,7 @@ services:
 #   3002  mystery-bomb-box-backend /health
 #   3306  mysql
 #   ----  redis (compose-internal only; not mapped to host)
+#   8080  utxo-swap-sequencer      /health  /api/v1/configurations
 #   8085  unipass-wallet-relayer   /health  /healthz  /readyz  /metrics
 #   8086  utxoswap-farm-sequencer  /health  /healthz  /readyz  /metrics
 #   8087  huehub-token-distributor /health
