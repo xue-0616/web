@@ -1,0 +1,80 @@
+# Nightly MySQL backup → S3-compatible object store.
+#
+# Hourly retention + daily retention handled by the bucket's
+# lifecycle policy (not this file).  This CronJob just produces
+# one .sql.gz per run and uploads.
+#
+# Prerequisite Secret: s3-backup-creds with keys
+#   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / S3_BUCKET /
+#   S3_ENDPOINT (optional for non-AWS)
+# Prerequisite Secret: mysql-backup-creds with
+#   MYSQL_HOST / MYSQL_USER / MYSQL_PASSWORD
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mysql-backup
+  namespace: huehub-backend
+spec:
+  # 02:15 daily; low-traffic window.
+  schedule: "15 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            fsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: backup
+              image: alpine:3.20
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  apk add --no-cache mysql-client aws-cli gzip
+                  STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+                  for DB in farm relayer; do
+                    echo "backup: ${DB} starting at ${STAMP}"
+                    mysqldump \
+                      --host="${MYSQL_HOST}" \
+                      --user="${MYSQL_USER}" \
+                      --password="${MYSQL_PASSWORD}" \
+                      --single-transaction \
+                      --quick \
+                      --routines \
+                      --triggers \
+                      --events \
+                      "${DB}" \
+                      | gzip -c \
+                      | aws s3 cp - \
+                          "s3://${S3_BUCKET}/mysql/${DB}/${STAMP}.sql.gz" \
+                          --endpoint-url="${S3_ENDPOINT:-https://s3.amazonaws.com}"
+                    echo "backup: ${DB} done"
+                  done
+              envFrom:
+                - secretRef:
+                    name: mysql-backup-creds
+                - secretRef:
+                    name: s3-backup-creds
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  memory: 512Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: false  # apk writes to /tmp
+                capabilities:
+                  drop: [ALL]

@@ -1,0 +1,15 @@
+{
+  "name": "huehub-backends-e2e",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Playwright E2E for the hardened backends. Starts as API-level contract tests; UI-level tests land per-app later.",
+  "scripts": {
+    "test": "playwright test",
+    "test:ci": "playwright test --reporter=github,html",
+    "install-browsers": "playwright install chromium --with-deps"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.45.0",
+    "@types/node": "^20.0.0"
+  }
+}

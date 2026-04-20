@@ -1,0 +1,79 @@
+# Ingress — terminates TLS at the edge, routes to the internal
+# ClusterIP Services.
+#
+# Two big variables to adjust per cluster:
+#
+#   1. ingressClassName — 'nginx' / 'traefik' / 'cilium' / your
+#      cloud's ALB controller.  Different classes handle
+#      annotations differently; the annotations here are
+#      nginx-ingress flavoured.
+#
+#   2. cert-manager ClusterIssuer — leave the tls.secretName
+#      entries and annotations pointing at your production issuer
+#      (Let's Encrypt prod, internal CA, Vault PKI, ...).  If
+#      you're not using cert-manager, pre-create the Secret and
+#      drop the annotations.
+#
+# The hostnames (huehub.example.com / relayer.example.com) are
+# placeholders.  The underlying services are HTTP-only by design;
+# TLS MUST terminate here and internal traffic is expected to stay
+# on a trusted network / service mesh.
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: huehub-backend
+  namespace: huehub-backend
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # Enforce HTTPS — nginx 308s any plain-HTTP request.
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # Security headers.  We don't implement these in the app —
+    # the Ingress is the right place because they apply to every
+    # response including static error pages.
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "Strict-Transport-Security: max-age=31536000; includeSubDomains";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+    # Rate limit per-client at the Ingress — CRIT-level abuse
+    # protection before requests even reach the app.  Tune based
+    # on your actual traffic profile.
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+    nginx.ingress.kubernetes.io/limit-connections: "20"
+    # Reasonable default timeouts; if the backend takes > 60s
+    # something is very wrong and we should not hold the client.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+spec:
+  ingressClassName: nginx  # change to your cluster's class
+  tls:
+    - hosts:
+        - farm.example.com
+      secretName: farm-tls
+    - hosts:
+        - relayer.example.com
+      secretName: relayer-tls
+  rules:
+    - host: farm.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: farm-sequencer
+                port:
+                  number: 80
+    - host: relayer.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: relayer
+                port:
+                  number: 80
