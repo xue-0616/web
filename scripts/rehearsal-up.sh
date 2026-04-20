@@ -97,20 +97,34 @@ while :; do
 done
 
 # ── 5. build + up the apps ───────────────────────────────────────────
-log "building and starting the 6 app services (first run ~8-15 min)…"
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up --build -d \
-  btc-assets-api solagram-backend mystery-bomb-box-backend \
+# btc-assets-api is intentionally excluded from the default list: it
+# lives behind `--profile chain` because it asserts at boot on real
+# CKB RPC + Bitcoin SPV + paymaster key and there's no way to run it
+# without those. Pass `--with-chain` to include it anyway.
+SERVICES=(
+  solagram-backend mystery-bomb-box-backend
   unipass-wallet-relayer utxoswap-farm-sequencer huehub-token-distributor
+)
+if [[ "${1:-}" == "--with-chain" ]]; then
+  SERVICES+=(btc-assets-api)
+  COMPOSE_PROFILES=chain
+  export COMPOSE_PROFILES
+fi
+
+log "building and starting ${#SERVICES[@]} app services (first run ~8-15 min)…"
+docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up --build -d "${SERVICES[@]}"
 
 # ── 6. poll /health on each app ──────────────────────────────────────
 declare -A PORTS=(
-  [btc-assets-api]=3000
   [solagram-backend]=3001
   [mystery-bomb-box-backend]=3002
   [unipass-wallet-relayer]=8085
   [utxoswap-farm-sequencer]=8086
   [huehub-token-distributor]=8087
 )
+if [[ "${1:-}" == "--with-chain" ]]; then
+  PORTS[btc-assets-api]=3000
+fi
 
 log "probing /health on each service (up to 180 s)…"
 deadline=$(( $(date +%s) + 180 ))
@@ -152,7 +166,7 @@ if (( fail )); then
   exit 1
 fi
 
-log "all 6 services green. extra probes:"
+log "all ${#PORTS[@]} services green. extra probes:"
 for port in 8085 8086; do
   printf '  readyz (%s) → ' "$port"
   curl -s -o /dev/null -w "HTTP %{http_code}\n" "http://127.0.0.1:${port}/readyz" || echo "unreachable"
