@@ -1,6 +1,6 @@
 use actix_web::{web, HttpResponse};
 use api_common::{context::AppContext, error::{ApiError, ApiSuccess}};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 #[derive(Deserialize)]
 pub struct CreateIssueRequest {
@@ -55,7 +55,7 @@ pub async fn handler(
         }))
         .send()
         .await
-        .map_err(|e| {
+        .map_err(|_e| {
             // SECURITY (L-2): Don't log raw error which may contain token info
             tracing::error!("GitHub API request failed (network error)");
             ApiError::Internal("GitHub API request failed".to_string())

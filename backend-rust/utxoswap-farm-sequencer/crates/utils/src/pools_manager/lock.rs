@@ -1,5 +1,4 @@
 use anyhow::Result;
-use deadpool_redis::redis::AsyncCommands;
 
 /// BUG-28 FIX: Lock manager now uses a unique lock value (UUID) and a Lua
 /// script for atomic release (delete-only-if-value-matches). This prevents

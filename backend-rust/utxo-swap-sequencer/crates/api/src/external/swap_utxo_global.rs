@@ -1,5 +1,5 @@
 use actix_web::{web, HttpResponse};
-use api_common::{context::AppContext, error::ApiSuccess, intents::SendIntentTxRequest};
+use api_common::{context::AppContext, intents::SendIntentTxRequest};
 
 /// POST /api/v1/external/utxo-global/swap
 /// UTXO Global swap endpoint — delegates to standard swap with partner API key tracking
@@ -9,7 +9,7 @@ use api_common::{context::AppContext, error::ApiSuccess, intents::SendIntentTxRe
 pub async fn handler(
     ctx: web::Data<AppContext>,
     req: actix_web::HttpRequest,
-    body: web::Json<SendIntentTxRequest>,
+    _body: web::Json<SendIntentTxRequest>,
 ) -> Result<HttpResponse, actix_web::Error> {
     // SECURITY (H-5): Validate UTXO Global API key
     let api_key = req.headers().get("X-API-Key")

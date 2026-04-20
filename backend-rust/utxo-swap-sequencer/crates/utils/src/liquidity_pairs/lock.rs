@@ -1,4 +1,3 @@
-use std::time::Duration;
 
 /// SECURITY (H-4): UUID for lock ownership verification
 /// Each lock has a unique value. Only the holder can release it.

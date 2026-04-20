@@ -36,7 +36,7 @@ fn to_big(v: u128) -> BigUint {
 
 /// Convert BigUint back to u128, returning None on overflow
 fn from_big(v: &BigUint) -> Option<u128> {
-    use std::convert::TryFrom;
+    
     // BigUint does not overflow, but we need it to fit in u128
     let bytes = v.to_bytes_le();
     if bytes.len() > 16 {

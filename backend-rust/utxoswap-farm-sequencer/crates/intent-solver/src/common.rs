@@ -1,5 +1,3 @@
-use anyhow::Result;
-
 /// Common farming calculation utilities
 
 /// Precision factor for reward calculations to avoid integer division truncation.

@@ -1,26 +1,21 @@
 use actix_web::{web, HttpResponse};
-use api_common::{context::AppContext, error::{ApiError, ApiSuccess}, pools::CreatePoolRequest};
+use api_common::{context::AppContext, error::ApiError, pools::CreatePoolRequest};
 
 /// POST /api/v1/pools/create
 pub async fn handler(
-    ctx: web::Data<AppContext>,
+    _ctx: web::Data<AppContext>,
     body: web::Json<CreatePoolRequest>,
 ) -> Result<HttpResponse, ApiError> {
     let _req = body.into_inner();
-    // Pool creation flow:
-    // 1. Parse CKB transaction, extract pool cell creation params
-    // 2. Validate: pair doesn't exist, initial liquidity meets minimum
-    // 3. Derive pool type hash from asset X and asset Y type hashes
-    // 4. Submit CKB transaction to create pool cell with TypeID
-    // 5. Store pool metadata in DB
-    use entity_crate::pools;
-    use sea_orm::*;
-    tracing::info!("Processing pool creation request");
-    //       2. Validate asset pair doesn't exist
-    //       3. Submit tx to CKB
-    //       4. Create pool record in DB
-    // MED-SW-1: pool creation flow needs CKB tx submission +
-    // duplicate-pair check before flipping to a real handler.
+    // Pool creation flow (TODO — MED-SW-1 stub; the real impl
+    // also needs a duplicate-pair check on top of the steps below):
+    //   1. Parse CKB transaction, extract pool cell creation params
+    //   2. Validate asset pair doesn't exist; initial liquidity
+    //      meets minimum
+    //   3. Derive pool type hash from asset X / Y type hashes
+    //   4. Submit CKB transaction to create pool cell with TypeID
+    //   5. Store pool metadata in DB
+    tracing::info!("Processing pool creation request (stub)");
     Err(ApiError::NotImplemented(
         "pool creation is not yet wired up".to_string(),
     ))

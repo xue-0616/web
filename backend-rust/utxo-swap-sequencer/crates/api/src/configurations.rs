@@ -90,7 +90,7 @@ mod tests {
     //! in-process pulls in MySQL + Redis. We instead exercise the
     //! "required fields present / absent" branching with a tiny
     //! local helper mirroring the handler's validation.
-    use super::*;
+    
     use api_common::context::EnvConfigRef;
 
     fn complete_cfg() -> EnvConfigRef {

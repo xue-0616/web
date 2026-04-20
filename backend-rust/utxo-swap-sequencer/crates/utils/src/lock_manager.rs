@@ -1,5 +1,7 @@
 use anyhow::Result;
-use redis::AsyncCommands;
+// NOTE: `redis::AsyncCommands` is intentionally not imported — all
+// lock ops run through `redis::cmd(...)` + Lua so the TOCTOU
+// guarantees from H-4 / L-5 stay auditable in one place.
 
 /// Redis-based distributed lock manager for pool processing
 ///

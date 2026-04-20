@@ -1,5 +1,5 @@
 use actix_web::{web, HttpResponse};
-use api_common::{context::AppContext, error::ApiSuccess};
+use api_common::context::AppContext;
 
 /// POST /api/v1/github/upload
 pub async fn handler(

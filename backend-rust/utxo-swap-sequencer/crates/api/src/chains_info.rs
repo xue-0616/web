@@ -13,11 +13,11 @@ pub async fn get_chains_info(ctx: web::Data<AppContext>) -> Result<HttpResponse,
         .send().await
         .map_err(actix_web::error::ErrorInternalServerError)?;
     let tip_body: serde_json::Value = tip_resp.json().await.unwrap_or_default();
-    let block_number = tip_body["result"].as_str().unwrap_or("0x0").to_string();
+    let _block_number = tip_body["result"].as_str().unwrap_or("0x0").to_string();
 
     // Fetch CKB price from Redis cache
     let mut conn = ctx.redis_conn().await.map_err(actix_web::error::ErrorInternalServerError)?;
-    let ckb_price: String = redis::cmd("GET")
+    let _ckb_price: String = redis::cmd("GET")
         .arg("sequencer:price:ckb")
         .query_async(&mut conn)
         .await

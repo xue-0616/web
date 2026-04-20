@@ -68,7 +68,7 @@ pub async fn award_points_for_completed_intents(ctx: &AppContext) -> anyhow::Res
         points_history::Entity::insert(record).exec(ctx.db()).await?;
 
         // Update account total
-        let mut acc_am = accounts::ActiveModel {
+        let _acc_am = accounts::ActiveModel {
             id: Set(account_id),
             ..Default::default()
         };

@@ -304,12 +304,22 @@ impl SecurePrivateKey {
         Ok(Self { inner: bytes })
     }
 
-    /// Access the raw key bytes (use sparingly)
+    /// Access the raw key bytes (use sparingly).
+    ///
+    /// Currently unused in the binary because the Redis-stream
+    /// consumer that would do the signing is still a fail-loud
+    /// stub (see `RELAYER_CONSUMER_ENABLED` and MED-RL-3).
+    /// `#[allow(dead_code)]` keeps the method part of the public
+    /// API so the signing pipeline can be wired up without
+    /// revisiting `SecurePrivateKey`.
+    #[allow(dead_code)]
     pub fn as_bytes(&self) -> &[u8] {
         &self.inner
     }
 
-    /// Return the key as 0x-prefixed hex string for passing to ethers
+    /// Return the key as 0x-prefixed hex string for passing to ethers.
+    /// See `as_bytes` above for why this is `dead_code` today.
+    #[allow(dead_code)]
     pub fn to_hex_string(&self) -> String {
         format!("0x{}", hex::encode(&self.inner))
     }

@@ -1,10 +1,10 @@
 use actix_web::{web, HttpResponse};
-use api_common::{context::AppContext, error::{ApiError, ApiSuccess}, intents::SendIntentTxRequest};
+use api_common::{context::AppContext, error::ApiError, intents::SendIntentTxRequest};
 
 /// POST /api/v1/intents/swap-input-for-exact-output
 /// Submit a swap intent with exact output amount
 pub async fn handler(
-    ctx: web::Data<AppContext>,
+    _ctx: web::Data<AppContext>,
     body: web::Json<SendIntentTxRequest>,
 ) -> Result<HttpResponse, ApiError> {
     // Same flow as swap_exact_input_for_output but with IntentType::SwapInputForExactOutput

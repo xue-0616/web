@@ -19,7 +19,7 @@ pub async fn update_status(
     db: &DatabaseConnection,
     intent_id: u64,
     status: intents::IntentStatus,
-    error_reason: Option<serde_json::Value>,
+    _error_reason: Option<serde_json::Value>,
 ) -> Result<(), DbErr> {
     let now = chrono::Utc::now().naive_utc();
     intents::Entity::update_many()

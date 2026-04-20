@@ -34,8 +34,8 @@ pub async fn create_pool(
     }
 
     // 2. Build and submit pool creation transaction
-    let client = reqwest::Client::new();
-    let rpc_url = &ctx.config.ckb_rpc_url;
+    let _client = reqwest::Client::new();
+    let _rpc_url = &ctx.config.ckb_rpc_url;
 
     // Fetch deployer cells from indexer for inputs
     let _deployer_cells = fetch_deployer_cells(ctx).await?;
@@ -47,7 +47,7 @@ pub async fn create_pool(
         hex::encode(asset_x_type_hash), hex::encode(asset_y_type_hash), initial_lp);
 
     // 3. Submit to CKB RPC (placeholder - full tx building in batch_tx.rs)
-    let tx_hash = [0u8; 32]; // Will be set after RPC send
+    let _tx_hash = [0u8; 32]; // Will be set after RPC send
 
     // 4. Save to DB
     let new_pool = pools::ActiveModel {

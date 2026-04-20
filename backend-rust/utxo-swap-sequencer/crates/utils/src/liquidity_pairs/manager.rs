@@ -1,5 +1,5 @@
 use api_common::context::AppContext;
-use entity_crate::{intents, pool_txs, pools};
+use entity_crate::{intents, pool_txs};
 use sea_orm::*;
 use sea_orm::sea_query::Expr;
 use sea_orm::TransactionTrait;

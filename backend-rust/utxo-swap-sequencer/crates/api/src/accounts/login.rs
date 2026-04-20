@@ -18,12 +18,6 @@ struct Claims {
     iat: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct ClaimsForValidation {
-    sub: String,
-    exp: u64,
-}
-
 /// POST /api/v1/accounts/login
 /// Authenticate via CKB wallet signature (JoyID / UniPass)
 pub async fn login(

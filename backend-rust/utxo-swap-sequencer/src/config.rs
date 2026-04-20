@@ -18,9 +18,17 @@ pub struct EnvConfig {
     pub sequencer_utxo_global_api_key: String,
     /// SECURITY (M-2): JWT secret — validated at startup to be non-empty and ≥32 bytes
     pub jwt_secret: String,
+    // `with_openapi` and `log_output_format` are env-var surface
+    // that operators already set in `.env.integration`; neither is
+    // read by the current startup path, but we keep them on the
+    // struct so envy::from_env doesn't reject a "real" env file as
+    // malformed. Wire them into the logger config + route builder
+    // in a future PR.
     #[serde(default)]
+    #[allow(dead_code)]
     pub with_openapi: bool,
     #[serde(default)]
+    #[allow(dead_code)]
     pub log_output_format: String,
     /// SECURITY (M-1): Allowed CORS origins (comma-separated). Defaults to restrictive.
     #[serde(default)]

@@ -10,7 +10,7 @@ pub async fn handler(ctx: web::Data<AppContext>) -> Result<HttpResponse, ApiErro
     let cached: Option<String> = redis::cmd("GET")
         .arg("sequencer:popular_tokens")
         .query_async(&mut conn).await.ok();
-    let top_tokens = cached.and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
+    let _top_tokens = cached.and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
         .unwrap_or_default();
     // based_tokens: CKB native + wrapped BTC
     // popular_tokens: sorted by 24h volume across all pools

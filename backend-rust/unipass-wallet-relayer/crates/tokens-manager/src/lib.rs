@@ -131,10 +131,10 @@ impl TokensManager {
     }
 
     /// Test-only hook to seed prices without hitting the network.
-    /// Kept behind `#[cfg(any(test, feature = "test-hooks"))]` so
-    /// production builds can never accidentally poison the cache
-    /// with an attacker-controlled value.
-    #[cfg(any(test, feature = "test-hooks"))]
+    /// `#[cfg(test)]`-gated so production builds can never
+    /// accidentally call it and poison the cache with an
+    /// attacker-controlled value.
+    #[cfg(test)]
     pub fn set_price_for_test(&mut self, id: &str, usd: f64) {
         self.prices.insert(id.to_string(), usd);
     }
