@@ -137,8 +137,56 @@ unsigned user intent to mainnet:
   (distributor)
 - `FARM_ADMIN_ADDRESSES empty — admin routes will reject everyone`
   (farm-sequencer — if you didn't populate it)
+- `FARM_PROCESSING_ENABLED=false — pools manager loop is parked`
+  (farm-sequencer — the pools manager returns early when unset; the
+  submit-create-pool and submit-intent endpoints return **503** with
+  an explanatory body so clients don't silently lose LP tokens)
+- `RELAYER_CONSUMER_ENABLED=false — running in fail-loud stub mode`
+  (relayer — see below). Flipping this to `true` **without** a real
+  signing pipeline will make the consumer loop `anyhow::bail!` on
+  every non-empty stream length; that's intentional.
+- `GET /configurations: missing required deployment env vars: […]`
+  (swap-sequencer — the endpoint now returns **503** listing the
+  unset vars if any of the on-chain deployment hashes are missing;
+  clients that used to get "" back and crash now get a documented
+  `serviceUnavailable` instead)
 
 These are **not** regressions. They mean the guards are active.
+
+## 4a. Security / guardrail env vars (round 5-6 additions)
+
+All of these default to the safest value and are **optional** —
+rehearsal will run with none of them set. Set them only when you
+intentionally want to change the behaviour.
+
+| Env var | Default | What it gates |
+|---|---|---|
+| `FARM_PROCESSING_ENABLED` | `false` | Farm sequencer pools-manager loop + submit-intent + submit-create-pool (fail-closed, returns 503 while `false`). Flip to `true` only after the real CKB batch-tx builder (HIGH-FM-3) lands. |
+| `RELAYER_CONSUMER_ENABLED` | `false` | Relayer Redis-stream consumer. `false` = observe-only stub (WARN-logs backlog). `true` without the full signing pipeline will `bail!` on non-empty streams by design — don't set `true` yet. |
+| `PRICE_ORACLE_MIN_USD_LIQUIDITY` | `1000` | Pool USD-value floor below which the swap-sequencer's price oracle will ignore a pool when deriving token prices (MED-SW-5). Negative values are rejected (falls back to default). `0` disables the gate entirely — test envs only. |
+| `SEQUENCER_LOCK_CODE_HASH` | *(unset → 503 on `/configurations`)* | One of the five deployment hashes the swap-sequencer serves to the frontend. Unset = `/api/v1/configurations` returns 503 listing which vars are missing. |
+| `SEQUENCER_LOCK_ARGS` | *(unset → 503)* | As above. |
+| `POOL_TYPE_CODE_HASH` | *(unset → 503)* | As above. |
+| `CONFIGS_CELL_TYPE_HASH` | *(unset → 503)* | As above. |
+| `DEPLOYMENT_CELL_TYPE_HASH` | *(unset → 503)* | As above. |
+| `SEQUENCER_LOCK_HASH_TYPE` | `1` (type) | Numeric hash_type the sequencer lock script uses. |
+| `SWAP_FEE_BPS` | `30` (0.30%) | Surfaced via `/configurations` so the frontend fee preview cannot drift from the batcher. |
+| `MIN_LIQUIDITY` | `1000` | First-LP lockup units. UI parity only; batcher enforcement lives in the pool contract. |
+| `MAX_INTENTS_PER_BATCH` | `50` | Advisory, exposed for UI queue-depth hints. |
+| `BATCH_INTERVAL_MS` | `3000` | Advisory. |
+| `APOLLO_URL` | *(unset → env-only config)* | Relayer. When set, Apollo overrides a narrow allow-list of fields (RPC URLs, port, slack webhook). **Reserved** fields that Apollo may NOT override: `relayer_private_key`, `database_url`, `redis_url`, `apollo_url`, `secret_path`. Attempts are logged at WARN and ignored. |
+
+## 4b. Status-code contract (MED-SW-1 / SW-2)
+
+The Rust services now distinguish three non-5xx failure modes,
+which matters for monitoring rules — don't page on 501/503, do page
+on 500:
+
+| Code | Meaning | Typical cause | Fix |
+|---|---|---|---|
+| **501 Not Implemented** | Endpoint route exists but handler isn't wired up yet | `add_liquidity`, `remove_liquidity`, `swap_input_for_exact_output`, `create_pool` on the swap-seq | Wait for the feature PR; don't alert |
+| **503 Service Unavailable** | Code is fine, ops has work to do | `FARM_PROCESSING_ENABLED=false`, `/configurations` with missing deployment hashes | Set the missing env var and redeploy |
+| **500 Internal** | Actual bug | panicked handler, unexpected DB error | Page on-call |
 
 ## 5. Running individual services
 
@@ -186,29 +234,49 @@ rm -rf ./data/mysql ./data/redis
 
 ## Open pre-deployment blockers
 
-Even after rehearsal passes you still need to resolve, in descending
-severity:
+As of round 6 of the deep-audit remediation, **every CRIT and HIGH
+security item is closed** and every MED is closed. What remains is
+functional work, not security work:
 
-1. ~~**BUG-P2-C2** — `unipass-wallet-relayer` currently accepts any
-   calldata from any client.~~ **FIXED** in commit introducing
-   `crates/relayer/src/replay.rs` +
-   `crates/execute-validator/src/validator.rs`. The
-   `POST /api/v1/transactions` handler now runs a 4-stage pipeline:
+1. ~~**BUG-P2-C2 / CRIT-RL-2** — relayer meta-tx pipeline~~ **FIXED**
+   (round 2). 4-stage pipeline:
    parse → structural validate (reject delegate_call, cap inner-tx
    count at 32) → Redis replay-claim `(chainId, wallet, nonce)` →
-   on-chain `eth_call` of the execute calldata so the wallet
-   contract's own `_validateSignature` is the ground truth. Handler
-   is covered by 6 unit tests against a mocked simulator (happy
-   path, replay, revert, bad selector, empty, delegate_call reject).
-   Validator + parser have 14 more unit tests. 25 tests total.
-2. **BUG-P1-H2** — `utxoswap-farm-sequencer` `create_pool` endpoint is
-   still a stub that returns `{"status":"pending"}` without doing
-   anything. Same source doc.
-3. **BUG-P2-H3/H4** — relayer Redis consumer spins 100 ms empty and
-   `/simulate` references an unbound variable. Same source doc.
+   on-chain `eth_call` simulation. 25 unit tests.
+2. ~~**BUG-P1-H2 / HIGH-FM-3** — farm-seq unauthenticated
+   `create_pool` stub~~ **FIXED** (round 3-5). Admin allow-list +
+   signature verification + duplicate-pool guard (MED-FM-3). The
+   **real CKB batch-tx builder** that would let the pools-manager
+   loop actually process intents is the remaining functional piece;
+   guarded by `FARM_PROCESSING_ENABLED=false` until it lands, so no
+   user LP tokens can get stuck in the meantime.
+3. ~~**BUG-P2-H3 — relayer `/simulate` unbound variable**~~ **FIXED**
+   (round 2).
+4. ~~**BUG-P2-H4 / MED-RL-3** — relayer Redis consumer spin-loop~~
+   **FIXED** (round 6). Fail-loud stub with the
+   `RELAYER_CONSUMER_ENABLED` gate. Real signing pipeline TODO.
 
-Rehearsal verifies the deployment plumbing. These bugs still require
-dedicated implementation sessions before any real user onboarding.
+### Functional gaps that still need implementation sessions
+
+- **CKB batch-tx builder** (`utxoswap-farm-sequencer/crates/utils/
+  src/pools_manager/manager.rs`) — currently returns early under
+  `FARM_PROCESSING_ENABLED=false`. Needs: UTXO collection, cell
+  assembly for the farm script, signing, and broadcast. Multi-
+  session work.
+- **Relayer signing pipeline** (`unipass-wallet-relayer/crates/
+  relayer-redis`) — `consume_once` observes `XLEN` but does not
+  yet `XREADGROUP` → sign → `eth_sendRawTransaction` → `XACK`.
+  Gated by `RELAYER_CONSUMER_ENABLED=false`.
+- **Integration tests with live sidecars** (MySQL, Redis, CKB) —
+  the per-PR gate today is unit-only; a scheduled integration job
+  that stands up the compose file and exercises the happy paths
+  would catch wiring regressions the unit tests miss.
+- **Frontend Playwright E2E** — no automated coverage of the six
+  frontend apps against the hardened backends.
+
+Rehearsal verifies the deployment plumbing and the fail-closed
+gates. The four items above are what's left before a real user
+onboarding.
 
 ---
 
