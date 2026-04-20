@@ -6,17 +6,25 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 // ---------------------------------------------------------------------------
-// Constant-time comparison (no short-circuit)
+// Constant-time comparison (no short-circuit, length-blinded)
 // ---------------------------------------------------------------------------
+//
+// CRIT-RL-1 (applies here too): always iterate `max(a.len, b.len)`
+// so wall-clock time never betrays whether the length check fired.
+// See the identical comment block in
+// backend-rust/unipass-wallet-relayer/src/security.rs for the
+// detailed threat model.
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
+    let max_len = a.len().max(b.len());
+    let mut diff: u8 = 0;
+    for i in 0..max_len {
+        let ai = if i < a.len() { a[i] } else { 0 };
+        let bi = if i < b.len() { b[i] } else { 0 };
+        diff |= ai ^ bi;
     }
-    let mut diff = 0u8;
-    for (x, y) in a.iter().zip(b.iter()) {
-        diff |= x ^ y;
-    }
-    diff == 0
+    let bytes_eq = (diff == 0) as u8;
+    let len_eq = (a.len() == b.len()) as u8;
+    (bytes_eq & len_eq) == 1
 }
 
 // ===========================================================================
