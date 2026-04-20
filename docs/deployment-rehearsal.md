@@ -36,6 +36,32 @@ exposition format) from the shared `huehub-observability` crate.
 - A devnet/testnet Solana RPC URL. Helius free tier is fine.
 - (Optional) A CKB testnet RPC URL.
 
+## TL;DR — one-shot script
+
+Everything below is wrapped in `scripts/rehearsal-up.sh`, which is
+idempotent and safe to re-run:
+
+```bash
+bash scripts/rehearsal-up.sh        # set up, build, bring up, probe
+bash scripts/rehearsal-down.sh      # stop (keep data)
+bash scripts/rehearsal-down.sh --wipe   # stop + delete ./data
+```
+
+The script:
+1. Verifies `docker` daemon is reachable.
+2. Installs `docker compose` v2 to `~/.docker/cli-plugins/` if absent
+   (no `sudo` required).
+3. Creates `.env.integration` from the template and fills every
+   `openssl rand -hex 32`-class secret automatically. **Never
+   overwrites an existing `.env.integration`.**
+4. Brings up mysql + redis, waits for both to report `healthy`.
+5. Builds + brings up the 6 app services (first run ~8–15 min).
+6. Polls `/health` on every service for up to 180 s and prints a
+   pass/fail table.
+
+The manual steps below explain what the script does if you'd rather
+walk through it by hand or debug a failing step.
+
 ## 1. Create `.env.integration`
 
 ```bash

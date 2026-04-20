@@ -8,9 +8,11 @@ WORKDIR /app
 ENV HUSKY=0
 
 COPY package.json package-lock.json* yarn.lock* ./
-RUN if [ -f package-lock.json ]; then npm ci --ignore-scripts; \
+# --legacy-peer-deps required because @jozefazz/nestjs-redoc advertises
+# an old peer range that npm 9+ refuses to satisfy otherwise.
+RUN if [ -f package-lock.json ]; then npm ci --ignore-scripts --legacy-peer-deps; \
     elif [ -f yarn.lock ]; then corepack enable && yarn install --frozen-lockfile --ignore-scripts; \
-    else npm install --ignore-scripts; fi
+    else npm install --ignore-scripts --legacy-peer-deps; fi
 
 COPY . .
 RUN npm run build
@@ -29,6 +31,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
 COPY --from=builder --chown=svc:svc /app/dist ./dist
 COPY --from=builder --chown=svc:svc /app/node_modules ./node_modules
 COPY --from=builder --chown=svc:svc /app/package.json ./
+
+# winston-daily-rotate-file writes under ./logs relative to cwd.
+RUN mkdir -p /app/logs && chown -R svc:svc /app/logs
 
 USER svc:svc
 EXPOSE 3001

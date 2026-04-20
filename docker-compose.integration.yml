@@ -48,7 +48,12 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    ports: ["6379:6379"]
+    # Expose-only (not mapped to host) so we don't clash with a
+    # system-level redis-server already listening on 6379. All
+    # compose services reach it via the `redis:6379` DNS name on the
+    # internal bridge. Swap `expose` for `ports` if you want to run
+    # `redis-cli` from the host.
+    expose: ["6379"]
     volumes:
       - ./data/redis:/data
     healthcheck:
@@ -58,22 +63,35 @@ services:
 
   # ── Node backends ─────────────────────────────────────────────────
   btc-assets-api:
+    # btc-assets-api requires real CKB RPC + Bitcoin SPV + paymaster
+    # key even to start (zod refuses to boot without them). Behind an
+    # opt-in profile so the default `docker compose up` stays green
+    # with the 5 other services.
+    #   docker compose --profile chain up -d btc-assets-api
+    profiles: ["chain"]
     build:
       context: ./backend-node/btc-assets-api
     restart: unless-stopped
     depends_on:
-      mysql: { condition: service_healthy }
       redis: { condition: service_healthy }
     ports: ["3000:3000"]
     environment:
       NODE_ENV: production
       ADDRESS: 0.0.0.0
       PORT: 3000
-      DATABASE_URL: mysql://${MYSQL_USER:-integration}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-integration}
       REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      # Compose evaluates :? even for services behind inactive
+      # profiles, so these are `:-` to avoid breaking the default
+      # rehearsal. The chain-profile service will crash at boot with
+      # a clear zod error if you forgot to set them.
       CKB_RPC_URL: ${CKB_RPC_URL:-}
-      BTC_RPC_URL: ${BTC_RPC_URL:-}
-      SENTRY_DSN: ${SENTRY_DSN_BTC_ASSETS:-}
+      BITCOIN_SPV_SERVICE_URL: ${BITCOIN_SPV_SERVICE_URL:-}
+      BITCOIN_ELECTRS_API_URL: ${BITCOIN_ELECTRS_API_URL:-}
+      BITCOIN_MEMPOOL_SPACE_API_URL: ${BITCOIN_MEMPOOL_SPACE_API_URL:-}
+      PAYMASTER_PRIVATE_KEY: ${PAYMASTER_PRIVATE_KEY:-}
+      PAYMASTER_RECEIVE_UTXO_CHECK: ${PAYMASTER_RECEIVE_UTXO_CHECK:-true}
+      SENTRY_DSN_URL: ${SENTRY_DSN_BTC_ASSETS:-}
 
   solagram-backend:
     build:
@@ -84,6 +102,11 @@ services:
       redis: { condition: service_healthy }
     ports: ["3001:3001"]
     environment:
+      # Decompiled AppModule does `_config.get('port')` (lowercase),
+      # NestJS ConfigService reads process.env case-sensitive, so we
+      # set the lowercase key directly.
+      port: "3001"
+      globalPrefix: ""
       NODE_ENV: production
       PORT: 3001
       DATABASE_HOST: mysql
@@ -108,6 +131,9 @@ services:
       redis: { condition: service_healthy }
     ports: ["3002:3002"]
     environment:
+      # Same lowercase-key quirk as solagram.
+      port: "3002"
+      globalPrefix: ""
       NODE_ENV: production
       PORT: 3002
       DATABASE_HOST: mysql
@@ -163,7 +189,13 @@ services:
       FARM_API_KEY: ${FARM_API_KEY:?set FARM_API_KEY in .env.integration}
       FARM_ADMIN_ADDRESSES: ${FARM_ADMIN_ADDRESSES:-}
       FARM_ADMIN_PUBKEYS: ${FARM_ADMIN_PUBKEYS:-}
-      CKB_RPC_URL: ${CKB_RPC_URL:-}
+      # CKB RPC is optional for pure process-startup rehearsal; the
+      # service parses these fields with envy at boot and will refuse
+      # to start if they are missing, so we provide a placeholder.
+      CKB_RPC_URL: ${CKB_RPC_URL:-http://placeholder-ckb-rpc:8114}
+      CKB_INDEXER_URL: ${CKB_INDEXER_URL:-http://placeholder-ckb-indexer:8116}
+      SEQUENCER_API_URL: ${SEQUENCER_API_URL:-}
+      SLACK_WEBHOOK: ${SLACK_WEBHOOK:-}
       CORS_ALLOWED_ORIGINS: ${FARM_CORS_ORIGINS:-}
 
   huehub-token-distributor:
@@ -195,7 +227,7 @@ services:
 #   3001  solagram-backend         /health
 #   3002  mystery-bomb-box-backend /health
 #   3306  mysql
-#   6379  redis
+#   ----  redis (compose-internal only; not mapped to host)
 #   8085  unipass-wallet-relayer   /health  /healthz  /readyz  /metrics
 #   8086  utxoswap-farm-sequencer  /health  /healthz  /readyz  /metrics
 #   8087  huehub-token-distributor /health
