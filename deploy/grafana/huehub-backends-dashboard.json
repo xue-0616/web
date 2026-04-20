@@ -1,0 +1,336 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "The Prometheus datasource scraping the huehub-backend namespace.",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "name": "Deploys",
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "SLIs + SLOs for the two hardened backends (farm-seq HIGH-FM-3, relayer MED-RL-3). Every panel's underlying metric is instrumented in-code; see deploy/prometheus/alerts.yml for the alert rules that fire from the same series.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "icon": "doc",
+      "tags": [],
+      "title": "On-call runbook",
+      "type": "link",
+      "url": "https://github.com/xue-0616/web/blob/main/docs/runbook.md"
+    },
+    {
+      "icon": "doc",
+      "tags": [],
+      "title": "Scaffold design",
+      "type": "link",
+      "url": "https://github.com/xue-0616/web/blob/main/docs/scaffold-design.md"
+    }
+  ],
+  "liveNow": false,
+  "panels": [
+    {
+      "type": "row",
+      "title": "farm-sequencer (HIGH-FM-3)",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "collapsed": false,
+      "id": 1
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Batch result throughput",
+      "description": "rate() of farm_batch_result_total by outcome label. The `completed` series becomes non-zero only after a real BatchTxBuilder lands; until then the loop runs on NoopBatchTxBuilder which always returns NotImplemented (all traffic in `released_notimpl`).",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [
+        {
+          "expr": "sum by (result) (rate(farm_batch_result_total[5m]))",
+          "legendFormat": "{{result}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {"drawStyle": "line", "fillOpacity": 10, "stacking": {"mode": "normal"}}
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "completed"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+          {"matcher": {"id": "byName", "options": "failed"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]},
+          {"matcher": {"id": "byName", "options": "released_transient"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}]},
+          {"matcher": {"id": "byName", "options": "released_notimpl"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]}
+        ]
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 1}
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Batch build latency (p50/p95/p99)",
+      "description": "histogram_quantile(...) of farm_batch_build_duration_seconds. Recorded only on the happy path, so this chart stays empty until a real builder is wired.",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, sum by (le) (rate(farm_batch_build_duration_seconds_bucket[5m])))", "legendFormat": "p50", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, sum by (le) (rate(farm_batch_build_duration_seconds_bucket[5m])))", "legendFormat": "p95", "refId": "B"},
+        {"expr": "histogram_quantile(0.99, sum by (le) (rate(farm_batch_build_duration_seconds_bucket[5m])))", "legendFormat": "p99", "refId": "C"}
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "s", "custom": {"drawStyle": "line", "fillOpacity": 0}},
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 1}
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Claim losses (replica race)",
+      "description": "rate of farm_batch_claim_lost_total. Expected near-zero on a single-replica deploy. Non-zero → FarmClaimRaceChronic alert candidate.",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [
+        {"expr": "rate(farm_batch_claim_lost_total[5m])", "legendFormat": "claim_lost/s", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "cps", "custom": {"drawStyle": "line", "fillOpacity": 10}},
+        "overrides": []
+      },
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 9}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Intents claimed (1h)",
+      "description": "Raw throughput of the claim step. Total rows claimed in the last 1h.",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [
+        {"expr": "sum(increase(farm_batch_claimed_intents_total[1h]))", "legendFormat": "", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "short", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}},
+        "overrides": []
+      },
+      "options": {"graphMode": "area", "colorMode": "background"},
+      "gridPos": {"h": 6, "w": 8, "x": 8, "y": 9}
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "FARM_PROCESSING_ENABLED",
+      "description": "Derived from whether any farm_batch_* metric has moved in the last 10m. Green = loop is live. Red = loop idle (either FARM_PROCESSING_ENABLED=false, pre-launch, or stalled — check FarmProcessingStalled alert).",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [
+        {"expr": "clamp_max(sum(rate(farm_batch_result_total[10m])) > bool 0, 1)", "legendFormat": "", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "IDLE", "color": "red"}, "1": {"text": "LIVE", "color": "green"}}}
+          ],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}
+        },
+        "overrides": []
+      },
+      "options": {"colorMode": "background"},
+      "gridPos": {"h": 6, "w": 8, "x": 16, "y": 9}
+    },
+    {
+      "type": "row",
+      "title": "unipass-wallet-relayer (MED-RL-3)",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 15},
+      "collapsed": false,
+      "id": 7
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Tx stream backlog (XLEN)",
+      "description": "The load-bearing relayer SLI. RelayerStreamBacklogGrowing alert fires if this is strictly increasing for 10m and exceeds 50.",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [
+        {"expr": "relayer_stream_backlog", "legendFormat": "backlog", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {"drawStyle": "line", "fillOpacity": 20},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 50}, {"color": "red", "value": 500}]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Entry result throughput by outcome",
+      "description": "rate() of relayer_entry_result_total{result=...}. The four labels match the four EntryAction variants: ack_success, ack_poisoned, retain_transient, retain_notimpl. Expect only retain_notimpl during MED-RL-3 rollout (NoopTxBroadcaster); ack_success climbs once a real impl lands.",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [
+        {"expr": "sum by (result) (rate(relayer_entry_result_total[5m]))", "legendFormat": "{{result}}", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {"drawStyle": "line", "fillOpacity": 10, "stacking": {"mode": "normal"}}
+        },
+        "overrides": [
+          {"matcher": {"id": "byName", "options": "ack_success"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}]},
+          {"matcher": {"id": "byName", "options": "ack_poisoned"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}]},
+          {"matcher": {"id": "byName", "options": "retain_transient"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}]},
+          {"matcher": {"id": "byName", "options": "retain_notimpl"}, "properties": [{"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}]}
+        ]
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Poisoned entries (10m)",
+      "description": "increase of relayer_entry_result_total{result=\"ack_poisoned\"}. ANY non-zero value here should trigger investigation — the submit endpoint validates inputs before XADD, so a poisoned entry means a schema drift or a rogue producer. RelayerPoisonedEntries alert.",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [
+        {"expr": "increase(relayer_entry_result_total{result=\"ack_poisoned\"}[10m])", "legendFormat": "poisoned/10m", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {"drawStyle": "bars", "fillOpacity": 80},
+          "color": {"mode": "fixed", "fixedColor": "red"}
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 24}
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Backlog trend (10m)",
+      "description": "Deriv of relayer_stream_backlog over 10m. Positive = growing (RPC degraded or consumer stuck). Negative = draining. Near-zero = steady state.",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [
+        {"expr": "deriv(relayer_stream_backlog[10m])", "legendFormat": "", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0},
+              {"color": "red", "value": 1}
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {"graphMode": "area", "colorMode": "background"},
+      "gridPos": {"h": 6, "w": 8, "x": 8, "y": 24}
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "RELAYER_CONSUMER status",
+      "description": "Derived from whether result counters have moved in 10m. LIVE = consumer is classifying entries. IDLE = either RELAYER_CONSUMER_ENABLED=false (pre-launch) or RelayerConsumerDead alert territory.",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [
+        {"expr": "clamp_max(sum(rate(relayer_entry_result_total[10m])) > bool 0, 1)", "legendFormat": "", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {"type": "value", "options": {"0": {"text": "IDLE", "color": "red"}, "1": {"text": "LIVE", "color": "green"}}}
+          ]
+        },
+        "overrides": []
+      },
+      "options": {"colorMode": "background"},
+      "gridPos": {"h": 6, "w": 8, "x": 16, "y": 24}
+    },
+    {
+      "type": "row",
+      "title": "Service health",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 30},
+      "collapsed": false,
+      "id": 13
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Up state",
+      "description": "Prometheus `up` gauge per target. 0 = ServiceDown alert candidate.",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [
+        {"expr": "up{namespace=\"huehub-backend\"}", "legendFormat": "{{service}}", "refId": "A"}
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 1,
+          "custom": {"drawStyle": "line", "fillOpacity": 20}
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 31}
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "HTTP 5xx rate per service",
+      "description": "HighHttpErrorRate alert fires at 5% over 10m. Chart here at a tighter 5m window for faster visual signal.",
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [
+        {
+          "expr": "sum by (job) (rate(http_requests_total{status=~\"5..\",namespace=\"huehub-backend\"}[5m])) / sum by (job) (rate(http_requests_total{namespace=\"huehub-backend\"}[5m]))",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {"drawStyle": "line", "fillOpacity": 10},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.01},
+              {"color": "red", "value": 0.05}
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 31}
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["huehub", "backend", "scaffold"],
+  "templating": {"list": []},
+  "time": {"from": "now-6h", "to": "now"},
+  "timepicker": {"refresh_intervals": ["10s", "30s", "1m", "5m", "15m", "30m", "1h"]},
+  "timezone": "",
+  "title": "huehub backends — farm-seq + relayer",
+  "uid": "huehub-backends",
+  "version": 1,
+  "weekStart": ""
+}
