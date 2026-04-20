@@ -13,6 +13,13 @@ pub struct Config {
     #[serde(default = "default_port")]
     pub port: u16,
 
+    /// Comma-separated allow-list of CORS origins. Empty default =
+    /// same-origin only. ZK proof generation is CPU-expensive, so
+    /// open CORS here doubles as a DoS amplifier; keep this locked
+    /// down. Round-8 / M-1.
+    #[serde(default)]
+    pub cors_allowed_origins: String,
+
     pub mysql: MySqlInfo,
     pub redis: RedisInfo,
 

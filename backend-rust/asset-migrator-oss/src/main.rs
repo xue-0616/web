@@ -79,10 +79,42 @@ async fn main() -> anyhow::Result<()> {
 
     // ---- HTTP server ----
     let bind_addr = (cfg.bind.clone(), cfg.port);
+    // M-1 / round 8: restrictive CORS by default. Parse the
+    // comma-separated allow-list ONCE here so we can emit a startup
+    // log telling the operator exactly which origins will be
+    // accepted; then clone into each worker thread.
+    let cors_origins: Vec<String> = cfg
+        .cors_allowed_origins
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if cors_origins.is_empty() {
+        tracing::info!(
+            "CORS: empty allow-list — only same-origin requests will be accepted \
+             (set cors_allowed_origins in config to allow specific origins)"
+        );
+    } else {
+        tracing::info!("CORS: allowed origins = {:?}", cors_origins);
+    }
     let server = HttpServer::new(move || {
+        // Build CORS per worker thread. Starts with a deny-all
+        // `Cors::default()` and adds each allow-listed origin
+        // explicitly; wildcards and `allow_any_origin` are
+        // deliberately unavailable.
+        let mut cors = Cors::default()
+            .allowed_methods(vec!["GET", "POST", "OPTIONS"])
+            .allowed_headers(vec![
+                actix_web::http::header::AUTHORIZATION,
+                actix_web::http::header::CONTENT_TYPE,
+            ])
+            .max_age(3600);
+        for origin in &cors_origins {
+            cors = cors.allowed_origin(origin);
+        }
         App::new()
             .app_data(state.clone())
-            .wrap(Cors::permissive()) // TODO(oss): restrict in prod via CORS_ALLOWED_ORIGINS
+            .wrap(cors)
             .configure(api::configure)
     })
     .bind(bind_addr.clone())

@@ -14,7 +14,7 @@ use actix_web::{
     HttpResponse, Responder,
     web::{self, Data, Json, Path, ServiceConfig},
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::{
     config::Config,

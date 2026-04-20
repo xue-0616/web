@@ -58,6 +58,21 @@ pub struct AssetMigratorConfigs {
     /// HTTP port; actix-web listens here.
     #[serde(default = "default_port")]
     pub port: u16,
+
+    /// Comma-separated list of origins allowed to call this API.
+    /// Empty string (the default) means NO cross-origin calls are
+    /// accepted — same-origin only. Matches the M-1 posture the
+    /// fund-critical Rust services adopted in rounds 1-4; no UI
+    /// today is expected to call us cross-origin, so the safe
+    /// default is "deny".
+    ///
+    /// Set e.g. `"https://app.example.com,https://admin.example.com"`
+    /// in the config JSON to allow-list specific origins. Wildcard
+    /// `"*"` is intentionally NOT honoured — if you truly want
+    /// permissive CORS during local dev, set this to the exact
+    /// `http://localhost:PORT` your frontend runs on.
+    #[serde(default)]
+    pub cors_allowed_origins: String,
 }
 
 fn default_bind() -> String {

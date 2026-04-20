@@ -12,6 +12,14 @@ pub struct Config {
     #[serde(default = "default_port")]
     pub port: u16,
 
+    /// Comma-separated allow-list of origins for CORS. Empty (the
+    /// default) means same-origin only. Wildcard `"*"` is NOT
+    /// honoured on purpose — this is a JWT-issuing service and an
+    /// any-origin posture would let any webpage craft login
+    /// requests against it. See round-8 docs / M-1.
+    #[serde(default)]
+    pub cors_allowed_origins: String,
+
     pub mysql: MysqlConfig,
     pub redis: RedisConfig,
 
