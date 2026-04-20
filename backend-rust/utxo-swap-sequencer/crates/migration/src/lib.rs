@@ -16,12 +16,13 @@ mod m20240624_060235_update_intent_transactions;
 mod m20240704_100612_create_accounts;
 mod m20240709_083725_create_points_history;
 mod m20241008_064931_update_intents;
+mod m20260420_000000_points_history_unique_claim;
 
 pub struct Migrator;
 
 /// SECURITY (L-24): Migration version — increment when adding new migrations
 /// Used to verify migration compatibility before running
-pub const MIGRATION_VERSION: u32 = 16;
+pub const MIGRATION_VERSION: u32 = 17;
 
 /// SECURITY (L-24): Verify migration count matches expected version
 /// This catches accidental migration file deletions or ordering issues
@@ -58,6 +59,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20240704_100612_create_accounts::Migration),
             Box::new(m20240709_083725_create_points_history::Migration),
             Box::new(m20241008_064931_update_intents::Migration),
+            Box::new(m20260420_000000_points_history_unique_claim::Migration),
         ]
     }
 }
